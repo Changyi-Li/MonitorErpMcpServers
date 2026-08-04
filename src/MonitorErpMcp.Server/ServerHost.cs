@@ -2,7 +2,10 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol;
 using MonitorErpMcp.Server.Tools;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MonitorErpMcp.Server
 {
@@ -93,6 +96,22 @@ namespace MonitorErpMcp.Server
         }
 
         /// <summary>
+        /// The serializer for tool structured content and its JSON text fallback: identical to the SDK
+        /// default (<see cref="McpJsonUtilities.DefaultOptions"/>) except null-valued properties are
+        /// emitted rather than omitted, so every property the advertised output schema marks required
+        /// is present on the wire.
+        /// </summary>
+        /// <remarks>
+        /// The SDK's output-schema generator marks every property required (it ignores nullability
+        /// annotations), while its default serializer drops nulls. A query result has no command
+        /// <c>fullPath</c>, so omitting it makes the response fail any client that validates structured
+        /// content against the advertised schema. Emitting nulls keeps <c>search</c> and
+        /// <c>get_record</c> responses conformant.
+        /// </remarks>
+        public static JsonSerializerOptions StructuredContentSerializer { get; } =
+            new(McpJsonUtilities.DefaultOptions) { DefaultIgnoreCondition = JsonIgnoreCondition.Never };
+
+        /// <summary>
         /// Registers the services shared by both transports: the singleton catalog and the MCP server
         /// with the three read-only tools and the chosen transport.
         /// </summary>
@@ -102,7 +121,7 @@ namespace MonitorErpMcp.Server
             // builders resolve it eagerly once at startup so no request pays the build cost.
             services.AddSingleton<CatalogService>();
 
-            var mcp = services.AddMcpServer().WithTools<MonitorApiTools>();
+            var mcp = services.AddMcpServer().WithTools([typeof(MonitorApiTools)], StructuredContentSerializer);
             switch (transport)
             {
                 case Transport.Stdio:

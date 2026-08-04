@@ -24,7 +24,13 @@ namespace MonitorErpMcp.Tests
         private static McpServerTool CreateTool(string methodName) =>
             McpServerTool.Create(
                 typeof(MonitorApiTools).GetMethod(methodName, BindingFlags.Public | BindingFlags.Static)!,
-                options: new McpServerToolCreateOptions { Services = Services });
+                options: new McpServerToolCreateOptions
+                {
+                    Services = Services,
+                    // The production wiring (ServerHost) registers tools with this serializer, which
+                    // emits null-valued properties so responses conform to the advertised output schema.
+                    SerializerOptions = ServerHost.StructuredContentSerializer,
+                });
 
         private static async Task<CallToolResult> CallAsync(McpServerTool tool, params (string Key, object? Value)[] args)
         {
@@ -411,6 +417,34 @@ namespace MonitorErpMcp.Tests
 
             Assert.NotNull(call.StructuredContent);
             Assert.Single(call.Content, c => c.Type == "text");
+        }
+
+        [Fact]
+        public async Task Search_StructuredContent_ConformsToAdvertisedOutputSchema()
+        {
+            // Regression: the advertised schema marks every result property required (including the
+            // commands-only fullPath), so query results must carry fullPath:null rather than omit it —
+            // clients that validate structured content against the schema rejected the call otherwise.
+            var tool = CreateTool(nameof(MonitorApiTools.Search));
+            var call = await CallAsync(tool, ("keyword", "part"));
+
+            Assert.NotNull(call.StructuredContent);
+            SchemaConformance.AssertConforms(tool.ProtocolTool.OutputSchema!.Value, call.StructuredContent!.Value, "search");
+        }
+
+        [Fact]
+        public async Task GetRecord_StructuredContent_ConformsToAdvertisedOutputSchema()
+        {
+            // A dto record is the sharpest case: module/route/method/fullPath/output/expandNote and most
+            // field constraints are null, and each null must still be present for the response to conform.
+            var tool = CreateTool(nameof(MonitorApiTools.GetRecord));
+            var call = await CallAsync(
+                tool,
+                ("clrType", "Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalLocation"),
+                ("expand", "0"));
+
+            Assert.NotNull(call.StructuredContent);
+            SchemaConformance.AssertConforms(tool.ProtocolTool.OutputSchema!.Value, call.StructuredContent!.Value, "get_record");
         }
     }
 }

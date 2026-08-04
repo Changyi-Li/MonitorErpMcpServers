@@ -205,6 +205,8 @@ namespace MonitorErpMcp.Tests
                 ["monitor_api_get_record", "monitor_api_list_modules", "monitor_api_search"],
                 tools.Select(t => t.Name).OrderBy(n => n));
             Assert.All(tools, t => Assert.True(t.ProtocolTool.Annotations?.ReadOnlyHint));
+            var searchTool = tools.Single(t => t.Name == "monitor_api_search");
+            var getRecordTool = tools.Single(t => t.Name == "monitor_api_get_record");
 
             var search = await client.CallToolAsync(
                 "monitor_api_search",
@@ -212,10 +214,32 @@ namespace MonitorErpMcp.Tests
                 cancellationToken: TestContext.Current.CancellationToken);
             Assert.NotEqual(true, search.IsError);
             Assert.NotNull(search.StructuredContent);
+            // The advertised output schema requires fullPath on every hit; a client that validates
+            // structured content against it rejected the call when queries omitted the null (issue #30).
+            SchemaConformance.AssertConforms(
+                searchTool.ProtocolTool.OutputSchema!.Value,
+                search.StructuredContent!.Value,
+                "monitor_api_search");
             var searchText = Assert.Single(search.Content.OfType<TextContentBlock>());
             var searchPayload = JsonSerializer.Deserialize<MonitorApiSearchResponse>(
                 searchText.Text, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             Assert.Equal(157, searchPayload!.Total);
+
+            // A dto record is the sharpest conformance case: most required identity fields are null.
+            var getRecord = await client.CallToolAsync(
+                "monitor_api_get_record",
+                new Dictionary<string, object?>
+                {
+                    ["clrType"] = "Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalLocation",
+                    ["expand"] = "0",
+                },
+                cancellationToken: TestContext.Current.CancellationToken);
+            Assert.NotEqual(true, getRecord.IsError);
+            Assert.NotNull(getRecord.StructuredContent);
+            SchemaConformance.AssertConforms(
+                getRecordTool.ProtocolTool.OutputSchema!.Value,
+                getRecord.StructuredContent!.Value,
+                "monitor_api_get_record");
         }
     }
 }
