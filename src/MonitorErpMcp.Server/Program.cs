@@ -1,23 +1,17 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using MonitorErpMcp.Server;
-using MonitorErpMcp.Server.Tools;
 
-// Stdio-hosted MCP catalog server. stdout carries the JSON-RPC protocol; server logs go to stderr.
-var builder = Host.CreateApplicationBuilder(args);
+// The catalog MCP server serves the same three read-only tools over stdio (the default) or stateless
+// streamable HTTP (--transport http). stdout carries the JSON-RPC protocol in stdio mode; server
+// logs go to stderr.
+var transport = ServerHost.ParseTransport(args);
 
-builder.Services.AddMcpServer()
-    .WithStdioServerTransport()
-    .WithTools<MonitorApiTools>();
-
-// Build the materialized catalog once at startup (reflection over MonitorG5.Api, tens of ms).
-builder.Services.AddSingleton<CatalogService>();
-
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole(options =>
+if (transport == ServerHost.Transport.Http)
 {
-    options.LogToStandardErrorThreshold = LogLevel.Trace;
-});
-
-await builder.Build().RunAsync();
+    var app = ServerHost.BuildHttpApp(args);
+    await app.RunAsync();
+}
+else
+{
+    var host = ServerHost.BuildStdioHost(args);
+    await host.RunAsync();
+}
