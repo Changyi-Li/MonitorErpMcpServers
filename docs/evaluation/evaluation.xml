@@ -1,0 +1,42 @@
+<evaluation>
+   <qa_pair>
+      <question>The response of the parts list query includes exactly one field that must be unique across all parts and is limited to at most 20 characters. What is that field called?</question>
+      <answer>PartNumber</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>To report that purchased goods have arrived, the Purchase area's ReportArrival command takes a nested set of locations. Each location can instead name a brand-new part location that does not yet exist. What is the exact documented condition under which the location's name field is mandatory?</question>
+      <answer>If reporting to a new location.</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Searching the catalog for "upload" returns two commands in the Common area. One of them transmits the file as a raw byte stream over multipart/form-data rather than sending it as a field in the JSON body. What is that command's display name?</question>
+      <answer>UploadFileStream</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>The parts list query returns a PackagingType enum. What is the numeric value of the member that denotes goods packed on European pallets?</question>
+      <answer>2</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>The parts list query lists the commands that can operate on the Part entity. How many such related commands are listed?</question>
+      <answer>63</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>The catalog groups operations into eight business areas. Which area carries the most command records? Answer with the module name.</question>
+      <answer>Sales</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Searching the catalog with the Chinese word 物料, which commonly denotes a manufactured item, surfaces operations for that entity. What is the display name of the top search result?</question>
+      <answer>Parts</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>The part list query became available in version 2.18, and the command that creates a part was introduced later. What version introduced the create-part command?</question>
+      <answer>2.29</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>The ArrivalLocation DTO is referenced by two records: the arrival row it belongs to, and a record in the receiving-inspection area that also reports which locations the approved goods are put into. What is the display name of the receiving-inspection record?</question>
+      <answer>ReceivingInspectionRow</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>When creating one or more parts, the API lets a client send multiple parts in a single create call. Is the CreatePart command batchable? Answer True or False.</question>
+      <answer>True</answer>
+   </qa_pair>
+</evaluation>
