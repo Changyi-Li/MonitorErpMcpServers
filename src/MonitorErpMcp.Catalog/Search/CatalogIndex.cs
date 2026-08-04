@@ -27,6 +27,13 @@ namespace MonitorErpMcp.Catalog.Search
         private const int FieldTokenBase = 80;
         private const int EnumValueTokens = 8;
 
+        /// <summary>
+        /// Offsets every description-field match below all identity-field tiers (identity scores run
+        /// 0–2; a description match lands at ≥ 10), so a description-only hit never ties or outranks
+        /// an alias/name/route hit. See <see cref="BestFieldScore"/>.
+        /// </summary>
+        private const int DescriptionTierOffset = 10;
+
         private readonly IReadOnlyList<CatalogRecord> _records;
 
         public CatalogIndex(IReadOnlyList<CatalogRecord> records)
@@ -41,15 +48,21 @@ namespace MonitorErpMcp.Catalog.Search
         public int CommandCount => _records.Count(r => r.Type == RecordType.Command);
 
         /// <summary>
-        /// Finds records whose name, CLR type, command full path, or route contains
-        /// <paramref name="keyword"/> (case-insensitive substring), optionally narrowed by
-        /// <c>type</c> and <c>module</c>, and paged by <paramref name="offset"/>/<paramref name="limit"/>.
+        /// Finds records whose searchable text matches <em>every</em> token of
+        /// <paramref name="keyword"/> — a case-insensitive substring over the record's aliases (en,
+        /// zh), name, CLR type, command full path, route, and, as a fallback tier, its bilingual
+        /// description — optionally narrowed by <c>type</c> and <c>module</c>, and paged by
+        /// <paramref name="offset"/>/<paramref name="limit"/>. No fuzzy matching: a token must be
+        /// literally present (substring), so a near-miss keyword like <c>"cstomer"</c> resolves nothing.
         /// </summary>
         /// <remarks>
         /// Results are ranked exact match first, then prefix, then substring over the matched field;
-        /// ties break queries before commands, then by shorter name (the core entity — e.g. <c>Parts</c>
-        /// for <c>"part"</c> — surfaces before compound names that merely share the prefix), then by
-        /// <c>ApiCategory</c> order, then by name. See docs/adr/0001-search-ranking-tiebreak.md.
+        /// a multi-token keyword scores as the sum of each token's best per-field match. A
+        /// description match is searched only as a fallback and never outranks an identity-field
+        /// match (see <see cref="BestFieldScore"/>). Ties break queries before commands, then by
+        /// shorter name (the core entity — e.g. <c>Parts</c> for <c>"part"</c> — surfaces before
+        /// compound names that merely share the prefix), then by <c>ApiCategory</c> order, then by
+        /// name. See docs/adr/0001-search-ranking-tiebreak.md.
         /// </remarks>
         public CatalogSearchResult Search(
             string keyword,
@@ -62,22 +75,20 @@ namespace MonitorErpMcp.Catalog.Search
             ArgumentOutOfRangeException.ThrowIfNegative(offset);
             ArgumentOutOfRangeException.ThrowIfNegative(limit);
 
+            // Split on whitespace so a multi-word keyword must match on every token
+            // (a single word is one token and behaves exactly as the previous substring match).
+            var tokens = keyword.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
             // Dto records are reached via their parents and are never directly searchable.
-            IEnumerable<CatalogRecord> matches = _records.Where(r => r.Type != RecordType.Dto && Matches(r, keyword));
+            var parsedType = type is null ? (RecordType?)null : ParseType(type);
 
-            if (type is not null)
-            {
-                matches = matches.Where(r => r.Type == ParseType(type));
-            }
-
-            if (module is not null)
-            {
-                matches = matches.Where(r => string.Equals(r.Module, module, StringComparison.OrdinalIgnoreCase));
-            }
-
-            var all = matches
-                .Select(r => (Record: r, Score: MatchScore(r, keyword)))
-                .OrderBy(x => x.Score)
+            var all = _records
+                .Where(r => r.Type != RecordType.Dto)
+                .Select(r => (Record: r, Result: Evaluate(r, tokens)))
+                .Where(x => x.Result.Matches)
+                .Where(x => parsedType is null || x.Record.Type == parsedType)
+                .Where(x => module is null || string.Equals(x.Record.Module, module, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x.Result.Score)
                 .ThenBy(x => x.Record.Type == RecordType.Query ? 0 : 1)
                 .ThenBy(x => x.Record.Name.Length)
                 .ThenBy(x => CategoryOrder(x.Record.Module!))
@@ -240,9 +251,14 @@ namespace MonitorErpMcp.Catalog.Search
                     g.Count(r => r.Type == RecordType.Command)))
                 .ToList();
 
-        /// <summary>The identity fields a keyword may match: structural identity plus hand-authored aliases (en, zh).</summary>
-        private static IEnumerable<string> SearchableFields(CatalogRecord record)
+        /// <summary>The identity text a keyword token may match: aliases (en, zh), name, CLR type, full path, route.</summary>
+        private static IEnumerable<string> IdentityFields(CatalogRecord record)
         {
+            foreach (var alias in record.Aliases.En.Concat(record.Aliases.Zh))
+            {
+                yield return alias;
+            }
+
             yield return record.Name;
             yield return record.ClrType;
             if (record.FullPath is not null)
@@ -254,19 +270,54 @@ namespace MonitorErpMcp.Catalog.Search
             {
                 yield return record.Route;
             }
-
-            foreach (var alias in record.Aliases.En.Concat(record.Aliases.Zh))
-            {
-                yield return alias;
-            }
         }
 
-        private static bool Matches(CatalogRecord record, string keyword) =>
-            SearchableFields(record).Any(f => f.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        /// <summary>The bilingual description text a keyword token may match, as the fallback tier.</summary>
+        private static IEnumerable<string> DescriptionFields(CatalogRecord record)
+        {
+            yield return record.Description.En;
+            yield return record.Description.Zh;
+        }
 
-        /// <summary>Best (lowest) match score across the searchable fields.</summary>
-        private static int MatchScore(CatalogRecord record, string keyword) =>
-            SearchableFields(record).Min(f => FieldScore(f, keyword));
+        /// <summary>
+        /// Evaluates a record against the keyword tokens in one pass. Every token must match some
+        /// field (no fuzzy matching); the rank score is the sum of each token's best per-field match.
+        /// A token that matches nothing fails the record outright, so the summed score is always finite.
+        /// </summary>
+        private static (bool Matches, int Score) Evaluate(CatalogRecord record, IReadOnlyList<string> tokens)
+        {
+            var score = 0;
+            foreach (var token in tokens)
+            {
+                var best = BestFieldScore(record, token);
+                if (best == int.MaxValue)
+                {
+                    return (false, int.MaxValue);
+                }
+
+                score += best;
+            }
+
+            return (true, score);
+        }
+
+        /// <summary>
+        /// Best (lowest) match score for one token. An identity-field match (exact 0 / prefix 1 /
+        /// substring 2) always wins; a description match is offset below every identity tier so it
+        /// never outranks an alias/name/route hit. <see cref="int.MaxValue"/> when the token matches
+        /// no field.
+        /// </summary>
+        private static int BestFieldScore(CatalogRecord record, string token)
+        {
+            var identity = IdentityFields(record).Min(f => FieldScore(f, token));
+            if (identity != int.MaxValue)
+            {
+                return identity;
+            }
+
+            var description = DescriptionFields(record).Min(f => FieldScore(f, token));
+            return description == int.MaxValue ? int.MaxValue : description + DescriptionTierOffset;
+        }
 
         /// <summary>0 = exact, 1 = prefix, 2 = substring; <see cref="int.MaxValue"/> if no match.</summary>
         private static int FieldScore(string field, string keyword)
