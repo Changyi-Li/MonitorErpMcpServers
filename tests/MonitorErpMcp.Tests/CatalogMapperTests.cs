@@ -17,7 +17,9 @@ namespace MonitorErpMcp.Tests
         {
             Assert.Equal(348, Records.Count(r => r.Type == RecordType.Query));
             Assert.Equal(716, Records.Count(r => r.Type == RecordType.Command));
-            Assert.Equal(1064, Records.Count);
+            // The dto set is derived from the assembly (not hand-pinned); the pinned assembly derives 93.
+            Assert.Equal(93, Records.Count(r => r.Type == RecordType.Dto));
+            Assert.Equal(1157, Records.Count);
         }
 
         [Fact]
@@ -54,13 +56,33 @@ namespace MonitorErpMcp.Tests
         {
             Assert.All(Records, r =>
             {
-                Assert.False(string.IsNullOrWhiteSpace(r.Module), $"module of {r.ClrType}");
                 Assert.False(string.IsNullOrWhiteSpace(r.ClrType));
                 Assert.False(string.IsNullOrWhiteSpace(r.Name), $"name of {r.ClrType}");
-                Assert.StartsWith("api/v1/", r.Route);
                 Assert.StartsWith("https://api.monitor.se/api/", r.HelpUrl);
                 Assert.NotNull(r.Description);
             });
+        }
+
+        [Fact]
+        public void QueryAndCommandRecords_CarryHttpSurface_ButDtosDoNot()
+        {
+            Assert.All(
+                Records.Where(r => r.Type != RecordType.Dto),
+                r =>
+                {
+                    Assert.False(string.IsNullOrWhiteSpace(r.Module), $"module of {r.ClrType}");
+                    Assert.StartsWith("api/v1/", r.Route);
+                    Assert.NotNull(r.Method);
+                });
+
+            Assert.All(
+                Records.Where(r => r.Type == RecordType.Dto),
+                r =>
+                {
+                    Assert.Null(r.Module);
+                    Assert.Null(r.Route);
+                    Assert.Null(r.Method);
+                });
         }
 
         [Fact]
@@ -256,6 +278,190 @@ namespace MonitorErpMcp.Tests
                 Assert.False(string.IsNullOrWhiteSpace(f.JsonType));
                 Assert.NotNull(f.Description);
             });
+        }
+
+        [Fact]
+        public void FieldClassification_DirectEnum_CarriesValues()
+        {
+            var part = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Inventory.Part");
+
+            var packagingType = part.Fields.Single(f => f.Name == "PackagingType");
+            Assert.Equal(FieldKind.Enum, packagingType.Kind);
+            Assert.Equal("integer", packagingType.JsonType);
+            Assert.NotNull(packagingType.Enum);
+            Assert.Equal("Monitor.API.Inventory.PackagingType", packagingType.Enum!.ClrType);
+            Assert.NotEmpty(packagingType.Enum.Values);
+        }
+
+        [Fact]
+        public void FieldClassification_FlagsEnum_CarriesAllMinusOne()
+        {
+            var saveAs = Assert.Single(Records, r => r.Type == RecordType.Command && r.FullPath == "Inventory/Parts/SaveAs");
+
+            var state = saveAs.Fields.Single(f => f.Name == "State");
+            Assert.Equal(FieldKind.Enum, state.Kind);
+            Assert.NotNull(state.Enum);
+            Assert.Equal("Monitor.API.Inventory.Commands.Parts.PartSaveAsStates", state.Enum!.ClrType);
+
+            var values = state.Enum.Values;
+            Assert.Equal(23, values.Count);
+            Assert.Equal((0, "None"), ((values[0].Value, values[0].Name)));
+            Assert.Contains(values, v => v.Name == "All" && v.Value == -1);
+            Assert.Contains(values, v => v.Name == "CopyRevisions" && v.Value == 1048576);
+            Assert.Equal(-1, values[^1].Value);
+        }
+
+        [Fact]
+        public void FieldClassification_SuppressedEnum_CarriesNoValues()
+        {
+            var configuration = Assert.Single(
+                Records,
+                r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Common.FormReportConfiguration");
+
+            var type = configuration.Fields.Single(f => f.Name == "Type");
+            Assert.Equal(FieldKind.Enum, type.Kind);
+            Assert.Null(type.Enum); // suppressed from documentation
+        }
+
+        [Fact]
+        public void FieldClassification_EnumInputWrapper_CarriesEnumValues()
+        {
+            var setProperties = Assert.Single(
+                Records,
+                r => r.Type == RecordType.Command && r.FullPath == "Inventory/Parts/SetProperties");
+
+            var packagingType = setProperties.Fields.Single(f => f.Name == "PackagingType");
+            Assert.Equal(FieldKind.InputWrapper, packagingType.Kind);
+            Assert.Equal("object", packagingType.JsonType);
+            Assert.NotNull(packagingType.Enum);
+            Assert.Equal("Monitor.API.Inventory.PackagingType", packagingType.Enum!.ClrType);
+            Assert.NotEmpty(packagingType.Enum.Values);
+        }
+
+        [Fact]
+        public void FieldClassification_Reference_ResolvesSimpleClrName()
+        {
+            var part = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Inventory.Part");
+
+            var productGroupId = part.Fields.Single(f => f.Name == "ProductGroupId");
+            Assert.Equal(FieldKind.Reference, productGroupId.Kind);
+            Assert.Equal("ProductGroup", productGroupId.References);
+            Assert.Equal("Monitor.API.Common.ProductGroup", productGroupId.RefClrType);
+        }
+
+        [Fact]
+        public void FieldClassification_StringFormReference_KeptVerbatim()
+        {
+            var customer = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Sales.Customer");
+
+            var rootId = customer.Fields.Single(f => f.Name == "RootId");
+            Assert.Equal(FieldKind.Reference, rootId.Kind);
+            Assert.Equal("CustomerRoot", rootId.References);
+            Assert.Null(rootId.RefClrType);
+        }
+
+        [Fact]
+        public void References_Census_OnQueryAndCommandFields()
+        {
+            var typeForm = 0;
+            var stringForm = 0;
+            foreach (var record in Records.Where(r => r.Type != RecordType.Dto))
+            {
+                foreach (var field in record.Fields.Where(f => f.References is not null))
+                {
+                    if (field.RefClrType is null)
+                    {
+                        stringForm++;
+                    }
+                    else
+                    {
+                        typeForm++;
+                    }
+                }
+            }
+
+            Assert.Equal(1457, typeForm);
+            Assert.Equal(42, stringForm);
+        }
+
+        [Fact]
+        public void FieldClassification_InputWrapper_IsDistinguished()
+        {
+            var addRow = Assert.Single(
+                Records,
+                r => r.Type == RecordType.Command && r.FullPath == "Sales/Shipments/AddPackageRowInformation");
+
+            var packageTypeId = addRow.Fields.Single(f => f.Name == "PackageTypeId");
+            Assert.Equal(FieldKind.InputWrapper, packageTypeId.Kind);
+            Assert.Equal("object", packageTypeId.JsonType);
+        }
+
+        [Fact]
+        public void FieldClassification_NestedCommand_IdentifiesInputType()
+        {
+            var create = Assert.Single(Records, r => r.Type == RecordType.Command && r.FullPath == "Inventory/Parts/Create");
+
+            var update = create.Fields.Single(f => f.Name == "Update");
+            Assert.Equal(FieldKind.NestedCommand, update.Kind);
+            Assert.Equal("Monitor.API.Inventory.Commands.Parts.SetPropertiesPart", update.RefClrType);
+        }
+
+        [Fact]
+        public void FieldClassification_Expandable_NamesTheEntity()
+        {
+            var part = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Inventory.Part");
+
+            var productGroup = part.Fields.Single(f => f.Name == "ProductGroup");
+            Assert.Equal(FieldKind.Expandable, productGroup.Kind);
+            Assert.True(productGroup.Expandable);
+            Assert.Equal("Monitor.API.Common.ProductGroup", productGroup.RefClrType);
+        }
+
+        [Fact]
+        public void FieldClassification_DtoField_CarriesRefClrType()
+        {
+            var reportArrival = Assert.Single(
+                Records,
+                r => r.Type == RecordType.Command && r.FullPath == "Purchase/PurchaseOrders/ReportArrivals");
+
+            var rows = reportArrival.Fields.Single(f => f.Name == "Rows");
+            Assert.Equal(FieldKind.Dto, rows.Kind);
+            Assert.Equal("array", rows.JsonType);
+            Assert.Equal("Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalRow", rows.RefClrType);
+        }
+
+        [Fact]
+        public void DtoRecords_AreDerivedAndCarryUsedBy()
+        {
+            var arrivalLocation = Assert.Single(
+                Records,
+                r => r.Type == RecordType.Dto && r.ClrType == "Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalLocation");
+
+            Assert.Equal("ArrivalLocation", arrivalLocation.Name);
+            Assert.Null(arrivalLocation.Module);
+            Assert.Null(arrivalLocation.Route);
+            Assert.Null(arrivalLocation.Method);
+            Assert.Equal("2.36", arrivalLocation.AvailableSince);
+            Assert.Equal(
+                [
+                    "Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalRow",
+                    "Monitor.API.Purchase.Commands.ReceivingInspection.ReceivingInspectionRow",
+                ],
+                arrivalLocation.UsedBy);
+        }
+
+        [Fact]
+        public void DtoRecordField_CarriesMandatoryWhen()
+        {
+            // The spec's canonical mandatoryWhen example lives here on a dto record.
+            var arrivalLocation = Assert.Single(
+                Records,
+                r => r.Type == RecordType.Dto && r.ClrType == "Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalLocation");
+
+            var partLocationName = arrivalLocation.Fields.Single(f => f.Name == "PartLocationName");
+            Assert.Equal(FieldKind.Raw, partLocationName.Kind);
+            Assert.True(partLocationName.Mandatory);
+            Assert.Equal("If reporting to a new location.", partLocationName.MandatoryWhen);
         }
     }
 }

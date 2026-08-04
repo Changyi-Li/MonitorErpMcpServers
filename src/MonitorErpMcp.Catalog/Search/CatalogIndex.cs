@@ -51,7 +51,8 @@ namespace MonitorErpMcp.Catalog.Search
             ArgumentOutOfRangeException.ThrowIfNegative(offset);
             ArgumentOutOfRangeException.ThrowIfNegative(limit);
 
-            IEnumerable<CatalogRecord> matches = _records.Where(r => Matches(r, keyword));
+            // Dto records are reached via their parents and are never directly searchable.
+            IEnumerable<CatalogRecord> matches = _records.Where(r => r.Type != RecordType.Dto && Matches(r, keyword));
 
             if (type is not null)
             {
@@ -68,7 +69,7 @@ namespace MonitorErpMcp.Catalog.Search
                 .OrderBy(x => x.Score)
                 .ThenBy(x => x.Record.Type == RecordType.Query ? 0 : 1)
                 .ThenBy(x => x.Record.Name.Length)
-                .ThenBy(x => CategoryOrder(x.Record.Module))
+                .ThenBy(x => CategoryOrder(x.Record.Module!))
                 .ThenBy(x => x.Record.Name, StringComparer.Ordinal)
                 .Select(x => x.Record)
                 .ToList();
@@ -92,7 +93,7 @@ namespace MonitorErpMcp.Catalog.Search
         {
             var normalized = NormalizePath(path);
             return _records.FirstOrDefault(r =>
-                string.Equals(NormalizePath(r.Route), normalized, StringComparison.Ordinal));
+                r.Route is not null && string.Equals(NormalizePath(r.Route), normalized, StringComparison.Ordinal));
         }
 
         /// <summary>Lowercases the path and strips a leading <c>api/v1/</c> segment (and any surrounding slashes).</summary>
@@ -114,7 +115,8 @@ namespace MonitorErpMcp.Catalog.Search
         /// </summary>
         public IReadOnlyList<CatalogModuleStats> ListModules() =>
             _records
-                .GroupBy(r => r.Module)
+                .Where(r => r.Type is RecordType.Query or RecordType.Command)
+                .GroupBy(r => r.Module!)
                 .OrderBy(g => CategoryOrder(g.Key))
                 .Select(g => new CatalogModuleStats(
                     g.Key,
@@ -132,7 +134,10 @@ namespace MonitorErpMcp.Catalog.Search
                 yield return record.FullPath;
             }
 
-            yield return record.Route;
+            if (record.Route is not null)
+            {
+                yield return record.Route;
+            }
         }
 
         private static bool Matches(CatalogRecord record, string keyword) =>

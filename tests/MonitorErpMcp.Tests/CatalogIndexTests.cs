@@ -210,5 +210,34 @@ namespace MonitorErpMcp.Tests
             Assert.Null(Index.GetByPath("api/v1/No/SuchRoute"));
             Assert.Null(Index.GetByPath("api/v1"));
         }
+
+        [Fact]
+        public void Search_ExcludesDtoRecords()
+        {
+            // Dto records are reached via their parents and are never directly searchable.
+            Assert.Equal(0, Index.Search("ArrivalLocation").Total);
+            Assert.Equal(0, Index.Search("SetComment").Total);
+            Assert.Equal(0, Index.Search("ArrivalRow").Total);
+        }
+
+        [Fact]
+        public void GetByClrType_ResolvesDtoRecords()
+        {
+            var arrivalLocation = Index.GetByClrType("Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalLocation");
+            Assert.NotNull(arrivalLocation);
+            Assert.Equal(RecordType.Dto, arrivalLocation!.Type);
+            Assert.Equal("ArrivalLocation", arrivalLocation.Name);
+            Assert.NotEmpty(arrivalLocation.Fields);
+        }
+
+        [Fact]
+        public void GetByPath_NeverResolvesDtoRecords()
+        {
+            // A dto record has no HTTP route, so no path resolves to one.
+            Assert.Null(Index.GetByPath("ArrivalLocation"));
+            Assert.Equal(
+                RecordType.Command,
+                Index.GetByPath("Purchase/PurchaseOrders/ReportArrivals")!.Type);
+        }
     }
 }

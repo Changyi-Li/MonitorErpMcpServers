@@ -151,6 +151,7 @@ namespace MonitorErpMcp.Server.Tools
                 record.AvailableSince,
                 record.ObsoleteSince,
                 record.HelpUrl,
+                record.UsedBy,
                 record.Description,
                 record.Fields.Select(ToField).ToList());
 
@@ -160,6 +161,10 @@ namespace MonitorErpMcp.Server.Tools
                 field.ClrType,
                 field.JsonType,
                 field.Format,
+                WireKindName(field.Kind),
+                field.References,
+                field.RefClrType,
+                ToFieldEnum(field.Enum),
                 field.Mandatory,
                 field.MandatoryWhen,
                 field.Default,
@@ -172,18 +177,43 @@ namespace MonitorErpMcp.Server.Tools
                 field.ObsoleteSince,
                 field.Description);
 
+        private static MonitorApiFieldEnum? ToFieldEnum(FieldEnum? fieldEnum) =>
+            fieldEnum is null
+                ? null
+                : new MonitorApiFieldEnum(
+                    fieldEnum.ClrType,
+                    fieldEnum.Values.Select(v => new MonitorApiEnumValue(v.Name, v.Value)).ToList());
+
+        /// <summary>The MCP-visible wire name for a record family.</summary>
+        private static string WireTypeName(RecordType type) => type switch
+        {
+            RecordType.Query => "query",
+            RecordType.Command => "command",
+            _ => "dto",
+        };
+
+        /// <summary>The MCP-visible wire name for a field kind.</summary>
+        private static string WireKindName(FieldKind kind) => kind switch
+        {
+            FieldKind.Raw => "raw",
+            FieldKind.Enum => "enum",
+            FieldKind.Reference => "reference",
+            FieldKind.Expandable => "expandable",
+            FieldKind.InputWrapper => "inputWrapper",
+            FieldKind.NestedCommand => "nestedCommand",
+            _ => "dto",
+        };
+
         private static MonitorApiSearchResult ToSearchResult(CatalogRecord record) =>
             new(
                 WireTypeName(record.Type),
-                record.Module,
+                // Only query/command records reach search; dto records carry null module/route/method.
+                record.Module!,
                 record.ClrType,
                 record.Name,
-                record.Route,
-                record.Method,
+                record.Route!,
+                record.Method!,
                 record.FullPath,
                 record.Description);
-
-        /// <summary>The MCP-visible wire name for a record family.</summary>
-        private static string WireTypeName(RecordType type) => type == RecordType.Query ? "query" : "command";
     }
 }

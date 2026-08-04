@@ -8,6 +8,12 @@ namespace MonitorErpMcp.Catalog.Model
 
         /// <summary>A state-changing POST operation backed by <c>[ApiCommand]</c>.</summary>
         Command,
+
+        /// <summary>
+        /// A plain request/response DTO class reached via a field. Not directly searchable and carries
+        /// no HTTP route; reached by <c>clrType</c> from its parents via the derived <see cref="CatalogRecord.UsedBy"/>.
+        /// </summary>
+        Dto,
     }
 
     /// <summary>A bilingual (English/Chinese) text pair.</summary>
@@ -17,32 +23,77 @@ namespace MonitorErpMcp.Catalog.Model
         public string Zh { get; init; } = string.Empty;
     }
 
+    /// <summary>The classification of a field, implied by its CLR type and attributes.</summary>
+    public enum FieldKind
+    {
+        /// <summary>A plain scalar (string, bool, integer, number, date-time, uuid, timespan).</summary>
+        Raw,
+
+        /// <summary>An enum field serialized as its integer code; carries <see cref="FieldRecord.Enum"/>.</summary>
+        Enum,
+
+        /// <summary>An id field marked <c>[References]</c> naming the referenced entity; carries <see cref="FieldRecord.References"/>.</summary>
+        Reference,
+
+        /// <summary>A field marked <c>[Expandable]</c> that returns the full referenced entity on request.</summary>
+        Expandable,
+
+        /// <summary>A <c>*Input</c> wrapper (<c>null</c> = "do not touch" vs <c>{ "Value": null }</c> = explicit null).</summary>
+        InputWrapper,
+
+        /// <summary>A field whose type is itself a command; identifies the nested command's input type.</summary>
+        NestedCommand,
+
+        /// <summary>A field whose type is a plain DTO class; carries <see cref="FieldRecord.RefClrType"/>.</summary>
+        Dto,
+    }
+
+    /// <summary>An enum field's numeric value vocabulary.</summary>
+    public sealed record FieldEnum
+    {
+        /// <summary>Full CLR type name of the enum, e.g. <c>Monitor.API.Inventory.Commands.Parts.PartSaveAsStates</c>.</summary>
+        public required string ClrType { get; init; }
+
+        /// <summary>The named members with their integer codes, honoring <c>[Flags]</c> (incl. <c>All = -1</c>).</summary>
+        public required IReadOnlyList<FieldEnumValue> Values { get; init; }
+    }
+
+    /// <summary>One named enum member with its integer code.</summary>
+    public sealed record FieldEnumValue
+    {
+        public required string Name { get; init; }
+        public required long Value { get; init; }
+    }
+
     /// <summary>
     /// Identity of a Monitor ERP API operation, derived by reflection from the pinned
     /// <c>MonitorG5.Api</c> assembly. <c>ClrType</c> is the canonical identity key.
     /// </summary>
     public sealed record CatalogRecord
     {
-        /// <summary>Query (<c>[ApiEntity]</c>) or command (<c>[ApiCommand]</c>).</summary>
+        /// <summary>Query (<c>[ApiEntity]</c>), command (<c>[ApiCommand]</c>), or dto (plain referenced class).</summary>
         public required RecordType Type { get; init; }
 
-        /// <summary>Business area, e.g. <c>Inventory</c>; the <c>ApiCategory</c> name.</summary>
-        public required string Module { get; init; }
+        /// <summary>Business area, e.g. <c>Inventory</c>; the <c>ApiCategory</c> name. <c>null</c> on dto records.</summary>
+        public required string? Module { get; init; }
 
         /// <summary>Full CLR type name, e.g. <c>Monitor.API.Inventory.Part</c>.</summary>
         public required string ClrType { get; init; }
 
-        /// <summary>Route segment: plural for queries (e.g. <c>Parts</c>); command title for commands.</summary>
+        /// <summary>Route segment for queries/commands (e.g. <c>Parts</c>); the simple class name on dto records.</summary>
         public required string Name { get; init; }
 
-        /// <summary>Route with host, language, and company omitted, e.g. <c>api/v1/Inventory/Parts</c>.</summary>
-        public required string Route { get; init; }
+        /// <summary>Route with host, language, and company omitted, e.g. <c>api/v1/Inventory/Parts</c>. <c>null</c> on dto records.</summary>
+        public required string? Route { get; init; }
 
-        /// <summary><c>GET</c> for queries, <c>POST</c> for commands.</summary>
-        public required string Method { get; init; }
+        /// <summary><c>GET</c> for queries, <c>POST</c> for commands. <c>null</c> on dto records.</summary>
+        public required string? Method { get; init; }
 
         /// <summary>Commands only: <c>{Category}/{EntityName}/{CommandName}</c>, e.g. <c>Inventory/Parts/Create</c>.</summary>
         public string? FullPath { get; init; }
+
+        /// <summary>Dto records only: the clrTypes of the records (query/command/dto) whose fields reference this dto.</summary>
+        public IReadOnlyList<string> UsedBy { get; init; } = [];
 
         /// <summary>Version the operation was introduced in, e.g. <c>2.18</c>.</summary>
         public string? AvailableSince { get; init; }
@@ -57,11 +108,12 @@ namespace MonitorErpMcp.Catalog.Model
         public string HelpUrl => $"https://api.monitor.se/api/{ClrType}.html";
 
         /// <summary>
-        /// The operation's fields. On a query record these are the API response members (constraints
-        /// such as <see cref="FieldRecord.NotNull"/>/<see cref="FieldRecord.MaxLength"/>/
-        /// <see cref="FieldRecord.Unique"/> are informational data-model facts). On a command record
-        /// they are the request-body inputs (<see cref="FieldRecord.Mandatory"/>/
+        /// The record's fields. On a query record these are the API response members (constraints such
+        /// as <see cref="FieldRecord.NotNull"/>/<see cref="FieldRecord.MaxLength"/>/
+        /// <see cref="FieldRecord.Unique"/> are informational data-model facts). On a command record they
+        /// are the request-body inputs (<see cref="FieldRecord.Mandatory"/>/
         /// <see cref="FieldRecord.MandatoryWhen"/>/<see cref="FieldRecord.Default"/> are input semantics).
+        /// A dto record's fields carry the class's actual constraints.
         /// </summary>
         public IReadOnlyList<FieldRecord> Fields { get; init; } = [];
 
@@ -70,9 +122,10 @@ namespace MonitorErpMcp.Catalog.Model
     }
 
     /// <summary>
-    /// One field of a query or command record. <see cref="JsonType"/>/<see cref="Format"/> carry the
+    /// One field of a query, command, or dto record. <see cref="JsonType"/>/<see cref="Format"/> carry the
     /// generic JSON wire type (the vocabulary an agent needs to produce valid JSON without knowing C#);
-    /// <see cref="ClrType"/> remains the identity key for the .NET type behind the field.
+    /// <see cref="ClrType"/> remains the identity key for the .NET type behind the field. <see cref="Kind"/>
+    /// classifies the field so an agent knows how to shape its value.
     /// </summary>
     public sealed record FieldRecord
     {
@@ -88,7 +141,19 @@ namespace MonitorErpMcp.Catalog.Model
         /// <summary>Wire format, e.g. <c>int32</c>, <c>int64</c>, <c>decimal</c>, <c>date-time</c>, <c>uuid</c>, <c>timespan</c>.</summary>
         public string? Format { get; init; }
 
-        /// <summary>Command records only: whether the field must be sent in the request body. False on query response members.</summary>
+        /// <summary>The field classification (raw, enum, reference, expandable, input wrapper, nested command, dto).</summary>
+        public required FieldKind Kind { get; init; }
+
+        /// <summary>Reference kind: the referenced entity's simple CLR name, e.g. <c>ProductGroup</c>.</summary>
+        public string? References { get; init; }
+
+        /// <summary>Dto/nested-command/expandable/reference kind: the referenced type's full CLR name (element type for collections).</summary>
+        public string? RefClrType { get; init; }
+
+        /// <summary>Enum kind (and enum-valued input wrappers): the numeric value vocabulary.</summary>
+        public FieldEnum? Enum { get; init; }
+
+        /// <summary>Command and dto records: whether the field must be sent in the request body. False on query response members.</summary>
         public bool Mandatory { get; init; }
 
         /// <summary>The circumstance under which the field is mandatory, from <c>MandatoryAttribute</c> (e.g. <c>PartLocationName</c> is mandatory when reporting to a new location).</summary>

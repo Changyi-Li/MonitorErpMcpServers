@@ -260,6 +260,45 @@ namespace MonitorErpMcp.Tests
         }
 
         [Fact]
+        public void GetRecord_Fields_CarryClassification()
+        {
+            var result = MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Inventory.Part");
+
+            var productGroupId = result.Fields.Single(f => f.Name == "ProductGroupId");
+            Assert.Equal("reference", productGroupId.Kind);
+            Assert.Equal("ProductGroup", productGroupId.References);
+
+            var packagingType = result.Fields.Single(f => f.Name == "PackagingType");
+            Assert.Equal("enum", packagingType.Kind);
+            Assert.NotNull(packagingType.Enum);
+            Assert.Equal("Monitor.API.Inventory.PackagingType", packagingType.Enum!.ClrType);
+            Assert.NotEmpty(packagingType.Enum.Values);
+
+            var planning = result.Fields.Single(f => f.Name == "PartPlanningInformations");
+            Assert.Equal("expandable", planning.Kind);
+            Assert.Equal("Monitor.API.Inventory.PartPlanningInformation", planning.RefClrType);
+        }
+
+        [Fact]
+        public void GetRecord_DtoRecord_ReturnsUsedByAndFields()
+        {
+            var result = MonitorApiTools.GetRecord(
+                Catalog,
+                clrType: "Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalLocation");
+
+            Assert.Equal("dto", result.Type);
+            Assert.Null(result.Module);
+            Assert.Null(result.Route);
+            Assert.Null(result.Method);
+            Assert.Contains("Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalRow", result.UsedBy);
+
+            var partLocationName = result.Fields.Single(f => f.Name == "PartLocationName");
+            Assert.Equal("raw", partLocationName.Kind);
+            Assert.True(partLocationName.Mandatory);
+            Assert.Equal("If reporting to a new location.", partLocationName.MandatoryWhen);
+        }
+
+        [Fact]
         public void BothTools_AreReadOnly()
         {
             Assert.True(CreateTool(nameof(MonitorApiTools.Search)).ProtocolTool.Annotations?.ReadOnlyHint);
