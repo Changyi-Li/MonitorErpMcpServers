@@ -33,19 +33,25 @@ namespace MonitorErpMcp.Server.Tools
             [Description("Keyword to match case-insensitively as a substring over record name, CLR type, command full path, and route.")]
             string keyword,
             [Description("Optional filter: 'query' or 'command'.")]
-            string? type = null,
+            string type = "",
             [Description("Optional filter: business area (module), e.g. 'Inventory'.")]
-            string? module = null,
+            string module = "",
             [Description("Maximum number of results to return; must be between 1 and 50. Default 10.")]
             int limit = DefaultLimit,
             [Description("Number of results to skip before returning; must be non-negative. Default 0.")]
             int offset = 0)
         {
-            if (type is not null
-                && !type.Equals("query", StringComparison.OrdinalIgnoreCase)
-                && !type.Equals("command", StringComparison.OrdinalIgnoreCase))
+            // Empty is the "absent" sentinel for the optional string params — declared as `string` so
+            // the schema advertises a plain type (not the ["string","null"] union that MCP Inspector
+            // renders as a JSON-null field). Collapse it to null for the null-based search logic.
+            var typeFilter = string.IsNullOrEmpty(type) ? null : type;
+            var moduleFilter = string.IsNullOrEmpty(module) ? null : module;
+
+            if (typeFilter is not null
+                && !typeFilter.Equals("query", StringComparison.OrdinalIgnoreCase)
+                && !typeFilter.Equals("command", StringComparison.OrdinalIgnoreCase))
             {
-                throw new McpException($"Invalid type filter '{type}'; expected 'query' or 'command'.");
+                throw new McpException($"Invalid type filter '{typeFilter}'; expected 'query' or 'command'.");
             }
 
             if (limit is < 1 or > MaxLimit)
@@ -58,7 +64,7 @@ namespace MonitorErpMcp.Server.Tools
                 throw new McpException($"offset must be non-negative; got {offset}.");
             }
 
-            var result = catalog.Index.Search(keyword, type, module, limit, offset);
+            var result = catalog.Index.Search(keyword, typeFilter, moduleFilter, limit, offset);
             return new MonitorApiSearchResponse(
                 result.Total,
                 result.Offset,
@@ -84,9 +90,9 @@ namespace MonitorErpMcp.Server.Tools
         public static MonitorApiGetRecordResponse GetRecord(
             CatalogService catalog,
             [Description("Full CLR type name, e.g. 'Monitor.API.Inventory.Part'. Provide exactly one of clrType or path.")]
-            string? clrType = null,
+            string clrType = "",
             [Description("Route path, e.g. 'api/v1/Inventory/Parts' or 'Inventory/Parts' (with or without the api/v1/ prefix). Provide exactly one of clrType or path.")]
-            string? path = null,
+            string path = "",
             [Description("Nested DTO expansion depth: '0' (refs only), '1', ..., or 'full' (default 'full', the whole tree inline).")]
             string expand = "full")
         {

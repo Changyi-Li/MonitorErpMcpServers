@@ -208,6 +208,14 @@ namespace MonitorErpMcp.Tests
             var searchTool = tools.Single(t => t.Name == "monitor_api_search");
             var getRecordTool = tools.Single(t => t.Name == "monitor_api_get_record");
 
+            // The advertised input schema must type clrType/path as a plain string, not a
+            // ["string","null"] union — MCP Inspector rendered such a field as JSON-null (editing
+            // produced a `""""nul` artifact).
+            var getRecordProps = tools.Single(t => t.Name == "monitor_api_get_record")
+                .ProtocolTool.InputSchema.GetProperty("properties");
+            Assert.Equal("string", getRecordProps.GetProperty("clrType").GetProperty("type").GetString());
+            Assert.Equal("string", getRecordProps.GetProperty("path").GetProperty("type").GetString());
+
             var search = await client.CallToolAsync(
                 "monitor_api_search",
                 new Dictionary<string, object?> { ["keyword"] = "part" },

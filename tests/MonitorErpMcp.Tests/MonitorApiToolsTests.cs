@@ -395,6 +395,41 @@ namespace MonitorErpMcp.Tests
         }
 
         [Fact]
+        public void GetRecord_InputSchema_NullableParamsArePlainStrings()
+        {
+            // Regression: nullable params were typed ["string","null"], which MCP Inspector renders
+            // as a JSON-null field (editing produced a `""""nul` artifact). The params are declared
+            // `string` (not `string?`) so the schema advertises a plain string, optional.
+            var tool = CreateTool(nameof(MonitorApiTools.GetRecord));
+            var properties = tool.ProtocolTool.InputSchema.GetProperty("properties");
+
+            foreach (var name in new[] { "clrType", "path" })
+            {
+                Assert.Equal("string", properties.GetProperty(name).GetProperty("type").GetString());
+            }
+
+            // expand keeps its real default; no parameter is required (exactly-one is enforced at runtime).
+            Assert.Equal("full", properties.GetProperty("expand").GetProperty("default").GetString());
+        }
+
+        [Fact]
+        public void Search_InputSchema_OptionalFiltersArePlainStrings()
+        {
+            var tool = CreateTool(nameof(MonitorApiTools.Search));
+            var properties = tool.ProtocolTool.InputSchema.GetProperty("properties");
+
+            foreach (var name in new[] { "type", "module" })
+            {
+                Assert.Equal("string", properties.GetProperty(name).GetProperty("type").GetString());
+            }
+
+            // keyword stays required; limit/offset remain present.
+            Assert.Contains("keyword", tool.ProtocolTool.InputSchema.GetProperty("required").EnumerateArray().Select(e => e.GetString()));
+            Assert.Contains("limit", properties.EnumerateObject().Select(p => p.Name));
+            Assert.Contains("offset", properties.EnumerateObject().Select(p => p.Name));
+        }
+
+        [Fact]
         public async Task Search_ReturnsStructuredContentAndJsonTextFallback()
         {
             var tool = CreateTool(nameof(MonitorApiTools.Search));
