@@ -9,6 +9,7 @@
   <Folder Name="/src/">
     <Project Path="src/MonitorErpMcp.Catalog/MonitorErpMcp.Catalog.csproj" Id="03413c4f-7640-49a2-8382-63e2f428661b" />
     <Project Path="src/MonitorErpMcp.Server/MonitorErpMcp.Server.csproj" Id="9ecc1e39-9922-47f2-afee-f61cf977d48c" />
+    <Project Path="src/MonitorErpMcp.Generator/MonitorErpMcp.Generator.csproj" Id="7f4c1a2b-8e5d-4f0a-9c6b-2d1a3e4f5a6b" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MonitorErpMcp.Tests/MonitorErpMcp.Tests.csproj" Id="60d1bc4e-57bf-47d8-aeff-8adaa80bd89b" />
