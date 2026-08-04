@@ -43,8 +43,9 @@ namespace MonitorErpMcp.Tests
         public void EveryCoveredModuleRecord_HasBilingualIdentity()
         {
             // T1 coverage: every searchable record in a covered module (the pilots plus Common,
-            // Manufacturing, and Purchase) carries a bilingual description and non-empty search aliases.
-            foreach (var module in new[] { "Inventory", "Sales", "Common", "Manufacturing", "Purchase", "Accounting", "TimeRecording" })
+            // Manufacturing, Purchase, Accounting, TimeRecording, and MQ) carries a bilingual
+            // description and non-empty search aliases.
+            foreach (var module in new[] { "Inventory", "Sales", "Common", "Manufacturing", "Purchase", "Accounting", "TimeRecording", "MQ" })
             {
                 Assert.All(
                     Merged.Records.Where(r => r.Module == module && r.Type != RecordType.Dto),
@@ -436,6 +437,17 @@ namespace MonitorErpMcp.Tests
             var requirementType = absencePeriod.Fields.Single(f => f.Name == "RequirementType");
             Assert.Equal("Whether the period is required, optional, or optional at schedule end.", requirementType.Description.En);
             Assert.Equal("期间是否为必需、可选或排班结束时可选。", requirementType.Description.Zh);
+        }
+
+        [Fact]
+        public void MqCommand_ReceivesAuthoredContent()
+        {
+            var createUser = Merged.GetByClrType("Monitor.API.MQ.Commands.Users.CreateUser")!;
+
+            Assert.Equal("Create a user for the MQ (message queue) API.", createUser.Description.En);
+            Assert.Equal("为 MQ（消息队列）API 创建用户。", createUser.Description.Zh);
+            Assert.Contains("create mq user", createUser.Aliases.En);
+            Assert.Contains("创建MQ用户", createUser.Aliases.Zh);
         }
 
         [Fact]
