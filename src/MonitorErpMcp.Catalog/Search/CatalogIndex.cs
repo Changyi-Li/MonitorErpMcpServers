@@ -77,6 +77,38 @@ namespace MonitorErpMcp.Catalog.Search
         }
 
         /// <summary>
+        /// Finds the record with the given full CLR type name, case-insensitively
+        /// (<c>ClrType</c> is the canonical key). Returns <c>null</c> when nothing matches.
+        /// </summary>
+        public CatalogRecord? GetByClrType(string clrType) =>
+            _records.FirstOrDefault(r => string.Equals(r.ClrType, clrType, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
+        /// Finds the record whose route path matches, case-insensitively and with or without the
+        /// leading <c>api/v1/</c> prefix. A record's display <c>Name</c> collides across records, so it
+        /// is not an addressable path and never matches here.
+        /// </summary>
+        public CatalogRecord? GetByPath(string path)
+        {
+            var normalized = NormalizePath(path);
+            return _records.FirstOrDefault(r =>
+                string.Equals(NormalizePath(r.Route), normalized, StringComparison.Ordinal));
+        }
+
+        /// <summary>Lowercases the path and strips a leading <c>api/v1/</c> segment (and any surrounding slashes).</summary>
+        private static string NormalizePath(string path)
+        {
+            var trimmed = path.Trim('/');
+            const string prefix = "api/v1/";
+            if (trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                trimmed = trimmed[prefix.Length..];
+            }
+
+            return trimmed.ToLowerInvariant();
+        }
+
+        /// <summary>
         /// Lists the business areas that carry records with their query/command counts,
         /// in <c>ApiCategory</c> enumeration order. Areas with no records (e.g. Internal) are absent.
         /// </summary>

@@ -23,6 +23,47 @@ namespace MonitorErpMcp.Catalog.Model
         BilingualText Description);
 
     /// <summary>
+    /// The MCP-visible response envelope for <c>monitor_api_get_record</c>: the full record with its
+    /// identity, availability, canonical helpUrl, and fields.
+    /// </summary>
+    public sealed record MonitorApiGetRecordResponse(
+        string Type,
+        string Module,
+        string ClrType,
+        string Name,
+        string Route,
+        string Method,
+        string? FullPath,
+        string? AvailableSince,
+        string? ObsoleteSince,
+        string HelpUrl,
+        BilingualText Description,
+        IReadOnlyList<MonitorApiField> Fields);
+
+    /// <summary>
+    /// One field of a record with its generic wire type (<c>jsonType</c>/<c>format</c>) and constraints.
+    /// On a query record the field is a response member (constraints are informational data-model facts);
+    /// on a command record it is a request-body input with <c>mandatory</c>/<c>mandatoryWhen</c>/<c>default</c>
+    /// input semantics.
+    /// </summary>
+    public sealed record MonitorApiField(
+        string Name,
+        string ClrType,
+        string JsonType,
+        string? Format,
+        bool Mandatory,
+        string? MandatoryWhen,
+        string? Default,
+        bool NotNull,
+        int? MaxLength,
+        int? MinLength,
+        bool Unique,
+        bool Expandable,
+        string? AvailableSince,
+        string? ObsoleteSince,
+        BilingualText Description);
+
+    /// <summary>
     /// One business area's query/command record counts.
     /// </summary>
     public sealed record CatalogModuleStats(

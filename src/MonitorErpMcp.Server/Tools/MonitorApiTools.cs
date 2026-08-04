@@ -67,6 +67,53 @@ namespace MonitorErpMcp.Server.Tools
         }
 
         /// <summary>
+        /// Returns the full record for one query or command, resolved by full CLR type name
+        /// (<c>clrType</c>) or route path (<c>path</c>). A record's display <c>name</c> collides across
+        /// records and is not an addressable key, so it is never resolved here.
+        /// </summary>
+        [McpServerTool(Name = "monitor_api_get_record", ReadOnly = true, UseStructuredContent = true)]
+        [Description("Return the full catalog record for one Monitor ERP API query or command, resolved by full " +
+                     "CLR type name (clrType) or route path (path). name is not an addressable key and never resolves. " +
+                     "Exactly one of clrType or path must be given. Returns the record identity, availableSince/obsoleteSince, " +
+                     "helpUrl, and every field with its generic wire type (jsonType/format) and constraints: query fields are " +
+                     "response members with informational constraints (notNull, maxLength, minLength, unique, expandable); command " +
+                     "fields are request-body inputs with mandatory/mandatoryWhen/default semantics. expand accepts '0', '1', ..., " +
+                     "or 'full' (default 'full') to control nested DTO expansion; refs-only for now. Read-only; never executes against a live ERP.")]
+        public static MonitorApiGetRecordResponse GetRecord(
+            CatalogService catalog,
+            [Description("Full CLR type name, e.g. 'Monitor.API.Inventory.Part'. Provide exactly one of clrType or path.")]
+            string? clrType = null,
+            [Description("Route path, e.g. 'api/v1/Inventory/Parts' or 'Inventory/Parts' (with or without the api/v1/ prefix). Provide exactly one of clrType or path.")]
+            string? path = null,
+            [Description("Nested DTO expansion depth: '0' (refs only), '1', ..., or 'full' (default 'full'). Currently refs-only.")]
+            string expand = "full")
+        {
+            var hasClrType = !string.IsNullOrWhiteSpace(clrType);
+            var hasPath = !string.IsNullOrWhiteSpace(path);
+
+            if (hasClrType == hasPath)
+            {
+                throw new McpException("Provide exactly one of clrType or path to identify the record; " +
+                                       "a record's display name is not an addressable key.");
+            }
+
+            ValidateExpand(expand);
+
+            var record = hasClrType
+                ? catalog.Index.GetByClrType(clrType!)
+                : catalog.Index.GetByPath(path!);
+
+            if (record is null)
+            {
+                throw new McpException($"No catalog record found for {(hasClrType ? $"clrType '{clrType}'" : $"path '{path}'")}. " +
+                                       "Resolve by clrType (full CLR type name, e.g. 'Monitor.API.Inventory.Part') or by path " +
+                                       "(route, e.g. 'api/v1/Inventory/Parts'); a record's display name is not an addressable key.");
+            }
+
+            return ToGetRecordResponse(record);
+        }
+
+        /// <summary>
         /// Lists the business areas that carry catalog records, each with its query and command counts.
         /// Areas with no records (e.g. Internal) are absent.
         /// </summary>
@@ -76,9 +123,58 @@ namespace MonitorErpMcp.Server.Tools
         public static MonitorApiListModulesResponse ListModules(CatalogService catalog) =>
             new(catalog.Index.ListModules());
 
+        /// <summary>Accepts <c>full</c> or any non-negative integer depth; refs-only for now, so the value is validated but unused.</summary>
+        private static void ValidateExpand(string expand)
+        {
+            if (expand.Equals("full", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (int.TryParse(expand, out var depth) && depth >= 0)
+            {
+                return;
+            }
+
+            throw new McpException($"Invalid expand value '{expand}'; expected '0', '1', ..., or 'full'.");
+        }
+
+        private static MonitorApiGetRecordResponse ToGetRecordResponse(CatalogRecord record) =>
+            new(
+                WireTypeName(record.Type),
+                record.Module,
+                record.ClrType,
+                record.Name,
+                record.Route,
+                record.Method,
+                record.FullPath,
+                record.AvailableSince,
+                record.ObsoleteSince,
+                record.HelpUrl,
+                record.Description,
+                record.Fields.Select(ToField).ToList());
+
+        private static MonitorApiField ToField(FieldRecord field) =>
+            new(
+                field.Name,
+                field.ClrType,
+                field.JsonType,
+                field.Format,
+                field.Mandatory,
+                field.MandatoryWhen,
+                field.Default,
+                field.NotNull,
+                field.MaxLength,
+                field.MinLength,
+                field.Unique,
+                field.Expandable,
+                field.AvailableSince,
+                field.ObsoleteSince,
+                field.Description);
+
         private static MonitorApiSearchResult ToSearchResult(CatalogRecord record) =>
             new(
-                record.Type == RecordType.Query ? "query" : "command",
+                WireTypeName(record.Type),
                 record.Module,
                 record.ClrType,
                 record.Name,
@@ -86,5 +182,8 @@ namespace MonitorErpMcp.Server.Tools
                 record.Method,
                 record.FullPath,
                 record.Description);
+
+        /// <summary>The MCP-visible wire name for a record family.</summary>
+        private static string WireTypeName(RecordType type) => type == RecordType.Query ? "query" : "command";
     }
 }

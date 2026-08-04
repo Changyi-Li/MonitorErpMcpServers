@@ -58,7 +58,203 @@ namespace MonitorErpMcp.Tests
                 Assert.False(string.IsNullOrWhiteSpace(r.ClrType));
                 Assert.False(string.IsNullOrWhiteSpace(r.Name), $"name of {r.ClrType}");
                 Assert.StartsWith("api/v1/", r.Route);
+                Assert.StartsWith("https://api.monitor.se/api/", r.HelpUrl);
                 Assert.NotNull(r.Description);
+            });
+        }
+
+        [Fact]
+        public void PartsQuery_Fields_CarryWireTypesAndConstraints()
+        {
+            var part = Assert.Single(Records, r => r.Type == RecordType.Query && r.Module == "Inventory" && r.Name == "Parts");
+
+            Assert.Equal(137, part.Fields.Count);
+
+            var id = part.Fields.Single(f => f.Name == "Id");
+            Assert.Equal("System.Int64", id.ClrType);
+            Assert.Equal("string", id.JsonType);
+            Assert.Equal("int64", id.Format);
+
+            var partNumber = part.Fields.Single(f => f.Name == "PartNumber");
+            Assert.Equal("string", partNumber.JsonType);
+            Assert.Null(partNumber.Format);
+            Assert.True(partNumber.NotNull);
+            Assert.Equal(20, partNumber.MaxLength);
+            Assert.True(partNumber.Unique);
+
+            var length = part.Fields.Single(f => f.Name == "Length");
+            Assert.Equal("System.Decimal", length.ClrType);
+            Assert.Equal("number", length.JsonType);
+            Assert.Equal("decimal", length.Format);
+
+            var useRandomLocationStorage = part.Fields.Single(f => f.Name == "UseRandomLocationStorage");
+            Assert.Equal("boolean", useRandomLocationStorage.JsonType);
+
+            var packagingType = part.Fields.Single(f => f.Name == "PackagingType");
+            Assert.Equal("integer", packagingType.JsonType);
+            Assert.Equal("int32", packagingType.Format);
+
+            var planningInformations = part.Fields.Single(f => f.Name == "PartPlanningInformations");
+            Assert.Equal("array", planningInformations.JsonType);
+            Assert.True(planningInformations.Expandable);
+
+            var daysToAdd = part.Fields.Single(f => f.Name == "DaysToAddToBestBeforeDate");
+            Assert.Equal("integer", daysToAdd.JsonType);
+            Assert.Equal("int32", daysToAdd.Format);
+        }
+
+        [Fact]
+        public void DtoField_WiresAsObject()
+        {
+            var part = Assert.Single(Records, r => r.Type == RecordType.Query && r.Name == "Parts");
+
+            var packageType = part.Fields.Single(f => f.Name == "PackageType");
+            Assert.Equal("object", packageType.JsonType);
+            Assert.True(packageType.Expandable);
+        }
+
+        [Fact]
+        public void WireTypeTable_MapsSpecialScalars()
+        {
+            // DateTimeOffset -> string/date-time
+            var interval = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.TimeRecording.AttendanceInterval");
+            var intervalStart = interval.Fields.Single(f => f.Name == "IntervalStart");
+            Assert.Equal("string", intervalStart.JsonType);
+            Assert.Equal("date-time", intervalStart.Format);
+
+            // TimeSpan -> string/timespan
+            var forecast = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Inventory.SalesForecast");
+            var timeSpan = forecast.Fields.Single(f => f.Name == "TimeSpan");
+            Assert.Equal("string", timeSpan.JsonType);
+            Assert.Equal("timespan", timeSpan.Format);
+
+            // Guid -> string/uuid
+            var standbyWork = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.TimeRecording.StandbyWork");
+            var bundleId = standbyWork.Fields.Single(f => f.Name == "BundleId");
+            Assert.Equal("string", bundleId.JsonType);
+            Assert.Equal("uuid", bundleId.Format);
+        }
+
+        [Fact]
+        public void CreatePartCommand_Fields_CarryRequestInputSemantics()
+        {
+            var create = Assert.Single(Records, r => r.Type == RecordType.Command && r.FullPath == "Inventory/Parts/Create");
+
+            Assert.Equal(6, create.Fields.Count);
+
+            var partNumber = create.Fields.Single(f => f.Name == "PartNumber");
+            Assert.True(partNumber.NotNull);
+            Assert.Equal(20, partNumber.MaxLength);
+            Assert.True(partNumber.Unique);
+
+            var standardUnitId = create.Fields.Single(f => f.Name == "StandardUnitId");
+            Assert.True(standardUnitId.NotNull);
+            Assert.Equal("string", standardUnitId.JsonType);
+            Assert.Equal("int64", standardUnitId.Format);
+
+            var type = create.Fields.Single(f => f.Name == "Type");
+            Assert.Equal("integer", type.JsonType);
+            Assert.Equal("int32", type.Format);
+
+            var partTemplateId = create.Fields.Single(f => f.Name == "PartTemplateId");
+            Assert.Equal("Template marked as preset.", partTemplateId.Default);
+            Assert.Equal("23.1", partTemplateId.AvailableSince);
+        }
+
+        [Fact]
+        public void QueryFields_AreResponseMembers_WithoutMandatorySemantics()
+        {
+            var part = Assert.Single(Records, r => r.Type == RecordType.Query && r.Name == "Parts");
+
+            // A query's fields are API response members: constraints are informational data-model
+            // facts and never carry request-only mandatory/default semantics.
+            Assert.All(part.Fields, f => Assert.False(f.Mandatory));
+            Assert.All(part.Fields, f => Assert.Null(f.MandatoryWhen));
+            Assert.All(part.Fields, f => Assert.Null(f.Default));
+        }
+
+        [Fact]
+        public void NoQueryField_Anywhere_CarriesRequestInputSemantics()
+        {
+            // Field direction is implied by family, never stored: the mapper enforces that a query's
+            // fields are response members and never carry mandatory/mandatoryWhen/default, even where
+            // the fixture happens to carry the attributes.
+            Assert.All(
+                Records.Where(r => r.Type == RecordType.Query).SelectMany(r => r.Fields),
+                f =>
+                {
+                    Assert.False(f.Mandatory, $"query field {f.Name} must not be mandatory");
+                    Assert.Null(f.MandatoryWhen);
+                    Assert.Null(f.Default);
+                });
+        }
+
+        [Fact]
+        public void CommandFields_CarryMandatoryAndMandatoryWhen()
+        {
+            // mandatoryWhen is the MandatoryAttribute stipulation, e.g. PartLocationName is mandatory
+            // when reporting to a new location (that field lives on the ArrivalLocation dto record and
+            // lands when #15 adds dto records); here the same pattern on a command's direct fields.
+            var cmd = Assert.Single(Records, r => r.Type == RecordType.Command && r.FullPath == "Sales/Shipments/AddPackageRowInformation");
+
+            var shipmentId = cmd.Fields.Single(f => f.Name == "ShipmentId");
+            Assert.True(shipmentId.Mandatory);
+            Assert.Equal("If not part of a create command", shipmentId.MandatoryWhen);
+
+            var count = cmd.Fields.Single(f => f.Name == "Count");
+            Assert.True(count.Mandatory);
+            Assert.Equal(">0", count.MandatoryWhen);
+
+            var volume = cmd.Fields.Single(f => f.Name == "Volume");
+            Assert.True(volume.Mandatory);
+            Assert.Null(volume.MandatoryWhen);
+        }
+
+        [Fact]
+        public void FieldAvailability_IsExtracted()
+        {
+            var customerOrder = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Sales.CustomerOrder");
+
+            var printoutTimeStamp = customerOrder.Fields.Single(f => f.Name == "PrintoutTimeStamp");
+            Assert.Equal("string", printoutTimeStamp.JsonType);
+            Assert.Equal("date-time", printoutTimeStamp.Format);
+            Assert.Equal("2.35", printoutTimeStamp.ObsoleteSince);
+
+            var customer = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Sales.Customer");
+            var ediCode = customer.Fields.Single(f => f.Name == "EdiCode");
+            Assert.Equal("2.32", ediCode.ObsoleteSince);
+        }
+
+        [Fact]
+        public void RecordAvailability_IsExtracted()
+        {
+            var part = Assert.Single(Records, r => r.Type == RecordType.Query && r.Name == "Parts");
+            Assert.Equal("2.18", part.AvailableSince);
+            Assert.Null(part.ObsoleteSince);
+
+            var obsolete = Assert.Single(Records, r => r.FullPath == "Sales/SalesPrices/GetPriceInfo");
+            Assert.Equal(RecordType.Command, obsolete.Type);
+            Assert.Equal("22.6", obsolete.AvailableSince);
+            Assert.Equal("25.5", obsolete.ObsoleteSince);
+        }
+
+        [Fact]
+        public void MinLength_IsExtracted()
+        {
+            var forecast = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Inventory.SalesForecast");
+            var code = forecast.Fields.Single(f => f.Name == "ForecastCode");
+            Assert.Equal(1, code.MinLength);
+        }
+
+        [Fact]
+        public void EveryField_CarriesIdentityAndWireType()
+        {
+            Assert.All(Records.SelectMany(r => r.Fields), f =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(f.Name));
+                Assert.False(string.IsNullOrWhiteSpace(f.ClrType));
+                Assert.False(string.IsNullOrWhiteSpace(f.JsonType));
+                Assert.NotNull(f.Description);
             });
         }
     }

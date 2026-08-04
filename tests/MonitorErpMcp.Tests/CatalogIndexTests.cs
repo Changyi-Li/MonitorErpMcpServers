@@ -166,5 +166,49 @@ namespace MonitorErpMcp.Tests
             Assert.Equal(348, modules.Values.Sum(m => m.QueryCount));
             Assert.Equal(716, modules.Values.Sum(m => m.CommandCount));
         }
+
+        [Fact]
+        public void GetByClrType_ResolvesQueryAndCommand()
+        {
+            Assert.Equal("api/v1/Inventory/Parts", Index.GetByClrType("Monitor.API.Inventory.Part")!.Route);
+            Assert.Equal(
+                "api/v1/Inventory/Parts/Create",
+                Index.GetByClrType("Monitor.API.Inventory.Commands.Parts.CreatePart")!.Route);
+        }
+
+        [Fact]
+        public void GetByClrType_IsCaseInsensitive()
+        {
+            Assert.Equal("api/v1/Inventory/Parts", Index.GetByClrType("monitor.api.inventory.part")!.Route);
+        }
+
+        [Fact]
+        public void GetByPath_ResolvesWithOrWithoutPrefix()
+        {
+            Assert.Equal("Monitor.API.Inventory.Part", Index.GetByPath("api/v1/Inventory/Parts")!.ClrType);
+            Assert.Equal("Monitor.API.Inventory.Part", Index.GetByPath("Inventory/Parts")!.ClrType);
+            Assert.Equal("Monitor.API.Inventory.Part", Index.GetByPath("/api/v1/inventory/parts")!.ClrType);
+            Assert.Equal("Monitor.API.Inventory.Part", Index.GetByPath("api/v1/Inventory/Parts/")!.ClrType);
+            Assert.Equal(
+                "Monitor.API.Inventory.Commands.Parts.CreatePart",
+                Index.GetByPath("api/v1/Inventory/Parts/Create")!.ClrType);
+        }
+
+        [Fact]
+        public void GetByPath_RejectsNameAsKey()
+        {
+            // A record's display name collides across records and is never an addressable path.
+            Assert.Null(Index.GetByPath("Parts"));
+            Assert.Null(Index.GetByPath("Customers"));
+            Assert.Null(Index.GetByClrType("Parts"));
+        }
+
+        [Fact]
+        public void GetByKey_UnknownKey_ReturnsNull()
+        {
+            Assert.Null(Index.GetByClrType("Monitor.API.No.Such.Type"));
+            Assert.Null(Index.GetByPath("api/v1/No/SuchRoute"));
+            Assert.Null(Index.GetByPath("api/v1"));
+        }
     }
 }

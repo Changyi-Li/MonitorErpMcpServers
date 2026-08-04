@@ -134,6 +134,132 @@ namespace MonitorErpMcp.Tests
         }
 
         [Fact]
+        public void GetRecord_ByClrType_ReturnsFullRecord()
+        {
+            var result = MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Inventory.Part");
+
+            Assert.Equal("query", result.Type);
+            Assert.Equal("Inventory", result.Module);
+            Assert.Equal("Monitor.API.Inventory.Part", result.ClrType);
+            Assert.Equal("Parts", result.Name);
+            Assert.Equal("api/v1/Inventory/Parts", result.Route);
+            Assert.Equal("GET", result.Method);
+            Assert.Null(result.FullPath);
+            Assert.Equal("2.18", result.AvailableSince);
+            Assert.Null(result.ObsoleteSince);
+            Assert.Equal("https://api.monitor.se/api/Monitor.API.Inventory.Part.html", result.HelpUrl);
+
+            var partNumber = result.Fields.Single(f => f.Name == "PartNumber");
+            Assert.Equal("string", partNumber.JsonType);
+            Assert.True(partNumber.NotNull);
+            Assert.Equal(20, partNumber.MaxLength);
+            Assert.True(partNumber.Unique);
+            Assert.False(partNumber.Mandatory);
+        }
+
+        [Fact]
+        public void GetRecord_ByPath_ResolvesWithAndWithoutPrefix()
+        {
+            Assert.Equal(
+                "Monitor.API.Inventory.Part",
+                MonitorApiTools.GetRecord(Catalog, path: "api/v1/Inventory/Parts").ClrType);
+            Assert.Equal(
+                "Monitor.API.Inventory.Part",
+                MonitorApiTools.GetRecord(Catalog, path: "Inventory/Parts").ClrType);
+            Assert.Equal(
+                "Monitor.API.Inventory.Commands.Parts.CreatePart",
+                MonitorApiTools.GetRecord(Catalog, path: "api/v1/Inventory/Parts/Create").ClrType);
+        }
+
+        [Fact]
+        public void GetRecord_CommandRecord_CarriesRequestInputSemantics()
+        {
+            var result = MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Sales.Commands.Shipments.AddShipmentPackageRowInformation");
+
+            Assert.Equal("command", result.Type);
+            Assert.Equal("POST", result.Method);
+            Assert.Equal("Sales/Shipments/AddPackageRowInformation", result.FullPath);
+
+            var shipmentId = result.Fields.Single(f => f.Name == "ShipmentId");
+            Assert.True(shipmentId.Mandatory);
+            Assert.Equal("If not part of a create command", shipmentId.MandatoryWhen);
+
+            var count = result.Fields.Single(f => f.Name == "Count");
+            Assert.True(count.Mandatory);
+            Assert.Equal(">0", count.MandatoryWhen);
+
+            var volume = result.Fields.Single(f => f.Name == "Volume");
+            Assert.True(volume.Mandatory);
+            Assert.Null(volume.MandatoryWhen);
+        }
+
+        [Fact]
+        public void GetRecord_ByName_IsRejected()
+        {
+            // A display name is not an addressable key: passing one never resolves.
+            var ex = Assert.Throws<McpException>(() => MonitorApiTools.GetRecord(Catalog, path: "Parts"));
+            Assert.Contains("clrType", ex.Message);
+            Assert.Contains("name", ex.Message);
+
+            var ex2 = Assert.Throws<McpException>(() => MonitorApiTools.GetRecord(Catalog, clrType: "Parts"));
+            Assert.Contains("clrType", ex2.Message);
+        }
+
+        [Fact]
+        public void GetRecord_NeitherNorBothKeys_Throw()
+        {
+            Assert.Throws<McpException>(() => MonitorApiTools.GetRecord(Catalog));
+            Assert.Throws<McpException>(() => MonitorApiTools.GetRecord(Catalog, clrType: "A", path: "B"));
+        }
+
+        [Fact]
+        public void GetRecord_UnknownKey_ThrowsMcpException()
+        {
+            Assert.Throws<McpException>(() => MonitorApiTools.GetRecord(Catalog, clrType: "No.Such.Type"));
+            Assert.Throws<McpException>(() => MonitorApiTools.GetRecord(Catalog, path: "api/v1/No/SuchRoute"));
+        }
+
+        [Fact]
+        public void GetRecord_Expand_IsAcceptedAndValidated()
+        {
+            Assert.Equal("Monitor.API.Inventory.Part", MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Inventory.Part", expand: "0").ClrType);
+            Assert.Equal("Monitor.API.Inventory.Part", MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Inventory.Part", expand: "2").ClrType);
+            Assert.Equal("Monitor.API.Inventory.Part", MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Inventory.Part", expand: "full").ClrType);
+
+            Assert.Throws<McpException>(() => MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Inventory.Part", expand: "deep"));
+            Assert.Throws<McpException>(() => MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Inventory.Part", expand: "-1"));
+        }
+
+        [Fact]
+        public void GetRecord_IsReadOnly_AndExposesNoNameParameter()
+        {
+            var tool = CreateTool(nameof(MonitorApiTools.GetRecord));
+
+            Assert.True(tool.ProtocolTool.Annotations?.ReadOnlyHint);
+            var inputSchema = tool.ProtocolTool.InputSchema;
+            Assert.Contains("clrType", inputSchema.GetProperty("properties").EnumerateObject().Select(p => p.Name));
+            Assert.Contains("path", inputSchema.GetProperty("properties").EnumerateObject().Select(p => p.Name));
+            Assert.Contains("expand", inputSchema.GetProperty("properties").EnumerateObject().Select(p => p.Name));
+            Assert.DoesNotContain("name", inputSchema.GetProperty("properties").EnumerateObject().Select(p => p.Name));
+        }
+
+        [Fact]
+        public async Task GetRecord_ReturnsStructuredContentAndJsonTextFallback()
+        {
+            var tool = CreateTool(nameof(MonitorApiTools.GetRecord));
+            var call = await CallAsync(tool, ("clrType", "Monitor.API.Inventory.Part"));
+
+            Assert.NotNull(call.StructuredContent);
+            var text = Assert.Single(call.Content, c => c.Type == "text");
+            var payload = JsonSerializer.Deserialize<MonitorApiGetRecordResponse>(
+                ((TextContentBlock)text).Text,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            Assert.Equal("Monitor.API.Inventory.Part", payload!.ClrType);
+            Assert.Equal(137, payload.Fields.Count);
+            Assert.Equal("int64", payload.Fields.Single(f => f.Name == "Id").Format);
+        }
+
+        [Fact]
         public void BothTools_AreReadOnly()
         {
             Assert.True(CreateTool(nameof(MonitorApiTools.Search)).ProtocolTool.Annotations?.ReadOnlyHint);
