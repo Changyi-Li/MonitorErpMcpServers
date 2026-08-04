@@ -463,5 +463,72 @@ namespace MonitorErpMcp.Tests
             Assert.True(partLocationName.Mandatory);
             Assert.Equal("If reporting to a new location.", partLocationName.MandatoryWhen);
         }
+
+        [Fact]
+        public void Query_RelatedCommands_AreDerivedByJoin()
+        {
+            var part = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Inventory.Part");
+
+            Assert.Equal(63, part.RelatedCommands.Count);
+            Assert.Contains("Monitor.API.Inventory.Commands.Parts.CreatePart", part.RelatedCommands);
+            Assert.Contains("Monitor.API.Inventory.Commands.Parts.SetPropertiesPart", part.RelatedCommands);
+        }
+
+        [Fact]
+        public void Query_QueryOptions_AreTheStandardSix()
+        {
+            var part = Assert.Single(Records, r => r.Type == RecordType.Query && r.ClrType == "Monitor.API.Inventory.Part");
+
+            Assert.Equal(["filter", "select", "expand", "orderby", "top", "skip"], part.QueryOptions);
+
+            // Every query carries the same six.
+            Assert.All(
+                Records.Where(r => r.Type == RecordType.Query),
+                r => Assert.Equal(["filter", "select", "expand", "orderby", "top", "skip"], r.QueryOptions));
+        }
+
+        [Fact]
+        public void Command_Batchable_CensusHolds()
+        {
+            var commands = Records.Where(r => r.Type == RecordType.Command).ToList();
+            Assert.Equal(710, commands.Count(c => c.Batchable));
+
+            Assert.True(Assert.Single(commands, c => c.FullPath == "Inventory/Parts/Create").Batchable);
+            Assert.False(Assert.Single(commands, c => c.FullPath == "Purchase/PurchaseOrders/ReportArrivals").Batchable);
+        }
+
+        [Fact]
+        public void Command_MultipartForm_IsDistinguished()
+        {
+            // Exactly one command takes multipart/form-data: UploadFileStream.
+            var multipart = Records.Where(r => r.Type == RecordType.Command && r.MultipartForm).ToList();
+            var upload = Assert.Single(multipart);
+            Assert.Equal("Common/ManageFiles/UploadFileStream", upload.FullPath);
+
+            var create = Assert.Single(Records, r => r.Type == RecordType.Command && r.FullPath == "Inventory/Parts/Create");
+            Assert.False(create.MultipartForm);
+        }
+
+        [Fact]
+        public void Command_Output_DefaultsToEntityCommandResponse()
+        {
+            Assert.All(
+                Records.Where(r => r.Type == RecordType.Command),
+                c => Assert.Equal("EntityCommandResponse", c.Output));
+        }
+
+        [Fact]
+        public void DtoRecords_CarryNoDerivedEdges()
+        {
+            Assert.All(
+                Records.Where(r => r.Type == RecordType.Dto),
+                r =>
+                {
+                    Assert.Empty(r.QueryOptions);
+                    Assert.Empty(r.RelatedCommands);
+                    Assert.False(r.Batchable);
+                    Assert.Null(r.Output);
+                });
+        }
     }
 }

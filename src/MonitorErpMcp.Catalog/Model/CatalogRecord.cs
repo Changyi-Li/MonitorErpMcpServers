@@ -95,6 +95,32 @@ namespace MonitorErpMcp.Catalog.Model
         /// <summary>Dto records only: the clrTypes of the records (query/command/dto) whose fields reference this dto.</summary>
         public IReadOnlyList<string> UsedBy { get; init; } = [];
 
+        /// <summary>
+        /// Queries only: the OData query options the GET endpoint supports. The pinned assembly does not
+        /// encode these, so all queries support the standard six — <c>filter</c>, <c>select</c>,
+        /// <c>expand</c>, <c>orderby</c>, <c>top</c>, <c>skip</c>.
+        /// </summary>
+        public IReadOnlyList<string> QueryOptions { get; init; } = [];
+
+        /// <summary>
+        /// Queries only: the clrTypes of the commands that mutate this entity, derived by joining every
+        /// <c>[ApiCommand](Category, EntityName)</c> to the matching <c>[ApiEntity](Category, Name)</c> —
+        /// never hand-maintained. Empty on commands and dto records.
+        /// </summary>
+        public IReadOnlyList<string> RelatedCommands { get; init; } = [];
+
+        /// <summary>Commands only: whether the POST is batchable (the <c>/Many</c> route suffix), from <c>ApiCommandAttribute.AllowMultiple</c>.</summary>
+        public bool Batchable { get; init; }
+
+        /// <summary>Commands only: whether the request body is multipart/form-data, from <c>ApiMultipartFormCommandAttribute</c>.</summary>
+        public bool MultipartForm { get; init; }
+
+        /// <summary>
+        /// Commands only: the command's response type. The assembly encodes no per-command response DTOs
+        /// (those exist only in the online help), so every command defaults to <c>EntityCommandResponse</c>.
+        /// </summary>
+        public string? Output { get; init; }
+
         /// <summary>Version the operation was introduced in, e.g. <c>2.18</c>.</summary>
         public string? AvailableSince { get; init; }
 

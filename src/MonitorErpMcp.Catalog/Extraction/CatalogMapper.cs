@@ -16,6 +16,10 @@ namespace MonitorErpMcp.Catalog.Extraction
         private const string QueryMethod = "GET";
         private const string CommandMethod = "POST";
         private const string RoutePrefix = "api/v1/";
+        private const string DefaultCommandOutput = "EntityCommandResponse";
+
+        /// <summary>Every query supports the standard Monitor query API OData options.</summary>
+        private static readonly string[] StandardQueryOptions = ["filter", "select", "expand", "orderby", "top", "skip"];
 
         // The pinned assembly exposes the referenced type only through private fields; type-form
         // resolution is a spec requirement (census 1,457 type-form references), so the bypass is intended.
@@ -41,11 +45,13 @@ namespace MonitorErpMcp.Catalog.Extraction
             var commandTypes = types.Where(t => t.GetCustomAttribute<ApiCommandAttribute>() is not null).ToList();
             var dtoTypes = DeriveDtoTypes(queryTypes.Concat(commandTypes));
             var usedBy = ComputeUsedBy(dtoTypes, queryTypes.Concat(commandTypes));
+            var commandsByEntity = CommandsByEntity(commandTypes);
 
             var records = new List<CatalogRecord>(queryTypes.Count + commandTypes.Count + dtoTypes.Count);
             foreach (var type in queryTypes)
             {
-                records.Add(MapQuery(type, type.GetCustomAttribute<ApiEntityAttribute>()!));
+                var entity = type.GetCustomAttribute<ApiEntityAttribute>()!;
+                records.Add(MapQuery(type, entity, RelatedCommands(entity, commandsByEntity)));
             }
 
             foreach (var type in commandTypes)
@@ -61,7 +67,7 @@ namespace MonitorErpMcp.Catalog.Extraction
             return records;
         }
 
-        private static CatalogRecord MapQuery(Type type, ApiEntityAttribute entity)
+        private static CatalogRecord MapQuery(Type type, ApiEntityAttribute entity, IReadOnlyList<string> relatedCommands)
         {
             var module = entity.Category.ToString();
             return new CatalogRecord
@@ -73,6 +79,8 @@ namespace MonitorErpMcp.Catalog.Extraction
                 Route = RoutePrefix + module + "/" + entity.Name,
                 Method = QueryMethod,
                 FullPath = null,
+                QueryOptions = StandardQueryOptions,
+                RelatedCommands = relatedCommands,
                 AvailableSince = type.GetCustomAttribute<AvailableSinceAttribute>()?.Version,
                 ObsoleteSince = type.GetCustomAttribute<ObsoleteSinceAttribute>()?.Version,
                 Fields = MapFields(type, RecordType.Query),
@@ -93,11 +101,37 @@ namespace MonitorErpMcp.Catalog.Extraction
                 Route = RoutePrefix + fullPath,
                 Method = CommandMethod,
                 FullPath = fullPath,
+                Batchable = command.AllowMultiple,
+                MultipartForm = type.GetCustomAttribute<ApiMultipartFormCommandAttribute>() is not null,
+                Output = DefaultCommandOutput,
                 AvailableSince = type.GetCustomAttribute<AvailableSinceAttribute>()?.Version,
                 ObsoleteSince = type.GetCustomAttribute<ObsoleteSinceAttribute>()?.Version,
                 Fields = MapFields(type, RecordType.Command),
                 Description = new BilingualText(),
             };
+        }
+
+        /// <summary>
+        /// Groups command types by <c>(Category, EntityName)</c> so each query can be joined to the
+        /// commands that mutate it — the derivation is by join, never hand-maintained.
+        /// </summary>
+        private static Dictionary<(ApiCategory Category, string EntityName), List<string>> CommandsByEntity(
+            IEnumerable<Type> commandTypes)
+        {
+            return commandTypes
+                .Select(t => (Type: t, Attribute: t.GetCustomAttribute<ApiCommandAttribute>()!))
+                .GroupBy(x => (x.Attribute.Category, x.Attribute.EntityName))
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(x => x.Type.FullName ?? x.Type.Name).OrderBy(x => x, StringComparer.Ordinal).ToList());
+        }
+
+        /// <summary>The clrTypes of the commands that mutate the entity, joined by <c>(Category, Name)</c>.</summary>
+        private static IReadOnlyList<string> RelatedCommands(
+            ApiEntityAttribute entity,
+            Dictionary<(ApiCategory Category, string EntityName), List<string>> commandsByEntity)
+        {
+            return commandsByEntity.TryGetValue((entity.Category, entity.Name), out var commands) ? commands : [];
         }
 
         private static CatalogRecord MapDto(Type type, IReadOnlyList<string> usedBy)

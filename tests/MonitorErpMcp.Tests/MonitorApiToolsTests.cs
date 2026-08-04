@@ -299,6 +299,32 @@ namespace MonitorErpMcp.Tests
         }
 
         [Fact]
+        public void GetRecord_Query_CarriesDerivedEdges()
+        {
+            var result = MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Inventory.Part");
+
+            Assert.Equal(
+                ["filter", "select", "expand", "orderby", "top", "skip"],
+                result.QueryOptions);
+            Assert.Equal(63, result.RelatedCommands.Count);
+            Assert.Contains("Monitor.API.Inventory.Commands.Parts.CreatePart", result.RelatedCommands);
+            Assert.False(result.Batchable);
+            Assert.Null(result.Output);
+        }
+
+        [Fact]
+        public void GetRecord_Command_CarriesCommandEdges()
+        {
+            var result = MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Inventory.Commands.Parts.CreatePart");
+
+            Assert.True(result.Batchable);
+            Assert.False(result.MultipartForm);
+            Assert.Equal("EntityCommandResponse", result.Output);
+            Assert.Empty(result.QueryOptions);
+            Assert.Empty(result.RelatedCommands);
+        }
+
+        [Fact]
         public void BothTools_AreReadOnly()
         {
             Assert.True(CreateTool(nameof(MonitorApiTools.Search)).ProtocolTool.Annotations?.ReadOnlyHint);
