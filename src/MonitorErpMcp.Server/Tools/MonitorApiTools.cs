@@ -77,15 +77,17 @@ namespace MonitorErpMcp.Server.Tools
                      "Exactly one of clrType or path must be given. Returns the record identity, availableSince/obsoleteSince, " +
                      "helpUrl, and every field with its generic wire type (jsonType/format) and constraints: query fields are " +
                      "response members with informational constraints (notNull, maxLength, minLength, unique, expandable); command " +
-                     "fields are request-body inputs with mandatory/mandatoryWhen/default semantics. expand accepts '0', '1', ..., " +
-                     "or 'full' (default 'full') to control nested DTO expansion; refs-only for now. Read-only; never executes against a live ERP.")]
+                     "fields are request-body inputs with mandatory/mandatoryWhen/default semantics. expand controls nested DTO " +
+                     "expansion inline: '0' (refs only), '1', ..., or 'full' (default 'full') returns the whole tree in one call — " +
+                     "dto fields carry inline fields/items and their refClrType. Oversized responses are truncated at the size " +
+                     "guard (~10K tokens) with expandNote 'truncated at depth N (size guard)'. Read-only; never executes against a live ERP.")]
         public static MonitorApiGetRecordResponse GetRecord(
             CatalogService catalog,
             [Description("Full CLR type name, e.g. 'Monitor.API.Inventory.Part'. Provide exactly one of clrType or path.")]
             string? clrType = null,
             [Description("Route path, e.g. 'api/v1/Inventory/Parts' or 'Inventory/Parts' (with or without the api/v1/ prefix). Provide exactly one of clrType or path.")]
             string? path = null,
-            [Description("Nested DTO expansion depth: '0' (refs only), '1', ..., or 'full' (default 'full'). Currently refs-only.")]
+            [Description("Nested DTO expansion depth: '0' (refs only), '1', ..., or 'full' (default 'full', the whole tree inline).")]
             string expand = "full")
         {
             var hasClrType = !string.IsNullOrWhiteSpace(clrType);
@@ -97,7 +99,7 @@ namespace MonitorErpMcp.Server.Tools
                                        "a record's display name is not an addressable key.");
             }
 
-            ValidateExpand(expand);
+            var maxDepth = ParseExpand(expand);
 
             var record = hasClrType
                 ? catalog.Index.GetByClrType(clrType!)
@@ -110,7 +112,7 @@ namespace MonitorErpMcp.Server.Tools
                                        "(route, e.g. 'api/v1/Inventory/Parts'); a record's display name is not an addressable key.");
             }
 
-            return ToGetRecordResponse(record);
+            return ToGetRecordResponse(catalog.Index.Expand(record, maxDepth));
         }
 
         /// <summary>
@@ -123,17 +125,17 @@ namespace MonitorErpMcp.Server.Tools
         public static MonitorApiListModulesResponse ListModules(CatalogService catalog) =>
             new(catalog.Index.ListModules());
 
-        /// <summary>Accepts <c>full</c> or any non-negative integer depth; refs-only for now, so the value is validated but unused.</summary>
-        private static void ValidateExpand(string expand)
+        /// <summary>Maps <c>expand</c> to a dto-expansion depth: <c>0</c>/<c>1</c>/… or <c>full</c> (unbounded).</summary>
+        private static int ParseExpand(string expand)
         {
             if (expand.Equals("full", StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                return int.MaxValue;
             }
 
             if (int.TryParse(expand, out var depth) && depth >= 0)
             {
-                return;
+                return depth;
             }
 
             throw new McpException($"Invalid expand value '{expand}'; expected '0', '1', ..., or 'full'.");
@@ -156,6 +158,7 @@ namespace MonitorErpMcp.Server.Tools
                 AvailableSince: record.AvailableSince,
                 ObsoleteSince: record.ObsoleteSince,
                 HelpUrl: record.HelpUrl,
+                ExpandNote: record.ExpandNote,
                 UsedBy: record.UsedBy,
                 Description: record.Description,
                 Fields: record.Fields.Select(ToField).ToList());
@@ -180,6 +183,8 @@ namespace MonitorErpMcp.Server.Tools
                 Expandable: field.Expandable,
                 AvailableSince: field.AvailableSince,
                 ObsoleteSince: field.ObsoleteSince,
+                Fields: field.JsonType == "array" ? null : field.Inline?.Select(ToField).ToList(),
+                Items: field.JsonType == "array" ? field.Inline?.Select(ToField).ToList() : null,
                 Description: field.Description);
 
         private static MonitorApiFieldEnum? ToFieldEnum(FieldEnum? fieldEnum) =>

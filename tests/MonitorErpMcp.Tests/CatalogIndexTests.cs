@@ -239,5 +239,77 @@ namespace MonitorErpMcp.Tests
                 RecordType.Command,
                 Index.GetByPath("Purchase/PurchaseOrders/ReportArrivals")!.Type);
         }
+
+        [Fact]
+        public void Expand_Full_InlinesDtoFieldsAndKeepsRefClrType()
+        {
+            var reportArrival = Index.GetByClrType("Monitor.API.Purchase.Commands.ArrivalReporting.ReportArrival")!;
+            var expanded = Index.Expand(reportArrival, int.MaxValue);
+
+            var rows = expanded.Fields.Single(f => f.Name == "Rows");
+            Assert.Equal(FieldKind.Dto, rows.Kind);
+            Assert.Equal("array", rows.JsonType);
+            Assert.Equal("Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalRow", rows.RefClrType);
+            Assert.NotNull(rows.Inline); // array of dtos inlines the element shape
+
+            var arrivalRow = rows.Inline!.Single(f => f.Name == "Locations");
+            Assert.Equal("array", arrivalRow.JsonType);
+            Assert.Equal("Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalLocation", arrivalRow.RefClrType);
+            Assert.NotNull(arrivalRow.Inline);
+        }
+
+        [Fact]
+        public void Expand_Zero_ReturnsRefsOnly()
+        {
+            var reportArrival = Index.GetByClrType("Monitor.API.Purchase.Commands.ArrivalReporting.ReportArrival")!;
+            var expanded = Index.Expand(reportArrival, 0);
+
+            var rows = expanded.Fields.Single(f => f.Name == "Rows");
+            Assert.Equal(FieldKind.Dto, rows.Kind);
+            Assert.Equal("Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalRow", rows.RefClrType);
+            Assert.Null(rows.Inline);
+        }
+
+        [Fact]
+        public void Expand_Depth_ControlsInlining()
+        {
+            var reportArrival = Index.GetByClrType("Monitor.API.Purchase.Commands.ArrivalReporting.ReportArrival")!;
+
+            // One level: Rows' items are inlined, but their dto subfield (Locations) is refs-only.
+            var depth1 = Index.Expand(reportArrival, 1);
+            var rows1 = depth1.Fields.Single(f => f.Name == "Rows");
+            Assert.NotNull(rows1.Inline);
+            Assert.Null(rows1.Inline!.Single(f => f.Name == "Locations").Inline);
+
+            // Two levels: Locations' items are inlined too.
+            var depth2 = Index.Expand(reportArrival, 2);
+            var rows2 = depth2.Fields.Single(f => f.Name == "Rows");
+            Assert.NotNull(rows2.Inline!.Single(f => f.Name == "Locations").Inline);
+        }
+
+        [Fact]
+        public void Expand_Full_ReportMeasuring_StaysBoundedAndComplete()
+        {
+            // The spec's worst-case tree is genuinely ~2K tokens, so a faithful 10K budget leaves it
+            // complete with no size-guard note.
+            var reportMeasuring = Index.GetByClrType("Monitor.API.Manufacturing.Commands.MeasuringReportings.ReportMeasuring")!;
+            var expanded = Index.Expand(reportMeasuring, int.MaxValue);
+
+            Assert.Null(expanded.ExpandNote);
+            var reporting = expanded.Fields.Single(f => f.Name == "Reporting");
+            Assert.Equal(FieldKind.Dto, reporting.Kind);
+            Assert.NotNull(reporting.Inline);
+        }
+
+        [Fact]
+        public void Expand_Full_OversizedRecord_TruncatesWithNote()
+        {
+            // Customer's response exceeds the 10K budget even without dto expansion (a wide record),
+            // so the size guard reports refs-only with a truthful note.
+            var customer = Index.GetByClrType("Monitor.API.Sales.Customer")!;
+            var expanded = Index.Expand(customer, int.MaxValue);
+
+            Assert.Equal("truncated at depth 0 (size guard)", expanded.ExpandNote);
+        }
     }
 }

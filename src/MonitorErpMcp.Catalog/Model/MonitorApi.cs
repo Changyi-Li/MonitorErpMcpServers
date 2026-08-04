@@ -43,6 +43,7 @@ namespace MonitorErpMcp.Catalog.Model
         string? AvailableSince,
         string? ObsoleteSince,
         string HelpUrl,
+        string? ExpandNote,
         IReadOnlyList<string> UsedBy,
         BilingualText Description,
         IReadOnlyList<MonitorApiField> Fields);
@@ -72,6 +73,8 @@ namespace MonitorErpMcp.Catalog.Model
         bool Expandable,
         string? AvailableSince,
         string? ObsoleteSince,
+        IReadOnlyList<MonitorApiField>? Fields,
+        IReadOnlyList<MonitorApiField>? Items,
         BilingualText Description);
 
     /// <summary>An enum field's numeric value vocabulary in the MCP-visible envelope.</summary>

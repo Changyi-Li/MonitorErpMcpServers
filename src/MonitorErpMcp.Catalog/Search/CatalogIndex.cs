@@ -16,6 +16,17 @@ namespace MonitorErpMcp.Catalog.Search
     /// </summary>
     public sealed class CatalogIndex
     {
+        /// <summary>The size-guard budget in estimated tokens (~10K, ≈ 40K characters of JSON).</summary>
+        private const int SizeGuardTokenBudget = 10_000;
+
+        // Token model (≈ 4 characters of serialized JSON per token): a base cost per record, a base
+        // per field's metadata (~320 chars), and ~32 chars per enum value; inline subtrees are summed
+        // recursively. Calibrated so a wide record like Customer (~150 fields) exceeds the budget
+        // while dto-deep trees like ReportMeasuring (~22 fields) stay comfortably under it.
+        private const int RecordTokenBase = 30;
+        private const int FieldTokenBase = 80;
+        private const int EnumValueTokens = 8;
+
         private readonly IReadOnlyList<CatalogRecord> _records;
 
         public CatalogIndex(IReadOnlyList<CatalogRecord> records)
@@ -95,6 +106,111 @@ namespace MonitorErpMcp.Catalog.Search
             return _records.FirstOrDefault(r =>
                 r.Route is not null && string.Equals(NormalizePath(r.Route), normalized, StringComparison.Ordinal));
         }
+
+        /// <summary>
+        /// Returns the record with dto-kind fields expanded inline up to <paramref name="maxDepth"/>:
+        /// a dto field carries both its inline <see cref="FieldRecord.Fields"/>/<see cref="FieldRecord.Items"/>
+        /// and <see cref="FieldRecord.RefClrType"/> so the graph stays navigable. <c>0</c> returns refs
+        /// only (no inline). The size guard bounds the response: if the expanded tree exceeds
+        /// <see cref="SizeGuardTokenBudget"/> tokens, the expansion depth is reduced and
+        /// <see cref="CatalogRecord.ExpandNote"/> reports <c>"truncated at depth N (size guard)"</c>.
+        /// </summary>
+        public CatalogRecord Expand(CatalogRecord record, int maxDepth)
+        {
+            if (maxDepth <= 0)
+            {
+                return record; // expand=0: refs only, nothing to inline or guard
+            }
+
+            // expand=full is "unbounded" — clamp only to the record's natural dto DAG depth so the
+            // whole tree is produced when it fits, with no silent truncation cap.
+            var targetDepth = Math.Min(maxDepth, NaturalDepth(record));
+
+            var expanded = ExpandToDepth(record, targetDepth);
+            if (EstimateTokens(expanded) <= SizeGuardTokenBudget)
+            {
+                return expanded;
+            }
+
+            // Oversized: find the largest depth that fits, falling back to refs only.
+            for (var depth = targetDepth - 1; depth >= 0; depth--)
+            {
+                var candidate = ExpandToDepth(record, depth);
+                if (EstimateTokens(candidate) <= SizeGuardTokenBudget)
+                {
+                    return candidate with { ExpandNote = $"truncated at depth {depth} (size guard)" };
+                }
+            }
+
+            // Even refs only exceeds the budget (a wide record); report the smallest tree.
+            return record with { ExpandNote = "truncated at depth 0 (size guard)" };
+        }
+
+        /// <summary>The deepest dto-hop level reachable from the record's fields (1-based).</summary>
+        private int NaturalDepth(CatalogRecord record) =>
+            record.Fields.Select(f => FieldDepth(f, 1, new HashSet<string>(StringComparer.Ordinal))).DefaultIfEmpty(0).Max();
+
+        private int FieldDepth(FieldRecord field, int depth, HashSet<string> path)
+        {
+            if (field.Kind != FieldKind.Dto || field.RefClrType is null || !path.Add(field.RefClrType))
+            {
+                return 0;
+            }
+
+            var dto = GetByClrType(field.RefClrType);
+            path.Remove(field.RefClrType);
+            if (dto is null || dto.Type != RecordType.Dto)
+            {
+                return 0;
+            }
+
+            return Math.Max(depth, dto.Fields.Select(f => FieldDepth(f, depth + 1, path)).DefaultIfEmpty(depth).Max());
+        }
+
+        /// <summary>Copies the record with every dto-kind field inlined to the given depth.</summary>
+        private CatalogRecord ExpandToDepth(CatalogRecord record, int maxDepth)
+        {
+            var path = new HashSet<string>(StringComparer.Ordinal);
+            return record with { Fields = record.Fields.Select(f => ExpandField(f, 1, maxDepth, path)).ToList() };
+        }
+
+        private FieldRecord ExpandField(FieldRecord field, int depth, int maxDepth, HashSet<string> path)
+        {
+            if (field.Kind != FieldKind.Dto || field.RefClrType is null || depth > maxDepth)
+            {
+                return field;
+            }
+
+            // Break dto cycles: never inline a dto already on the current expansion path.
+            if (!path.Add(field.RefClrType))
+            {
+                return field;
+            }
+
+            var dto = GetByClrType(field.RefClrType);
+            if (dto is null || dto.Type != RecordType.Dto)
+            {
+                path.Remove(field.RefClrType);
+                return field;
+            }
+
+            var inline = dto.Fields.Select(f => ExpandField(f, depth + 1, maxDepth, path)).ToList();
+            path.Remove(field.RefClrType);
+
+            return field with { Inline = inline };
+        }
+
+        /// <summary>
+        /// A token estimate of the expanded response, proxying the serialized JSON size
+        /// (≈ 4 characters per token): a base cost per field plus its enum values and inlined subtree.
+        /// </summary>
+        private static int EstimateTokens(CatalogRecord record) =>
+            RecordTokenBase + record.Fields.Sum(EstimateTokens);
+
+        private static int EstimateTokens(FieldRecord field) =>
+            FieldTokenBase
+            + (field.Enum?.Values.Count ?? 0) * EnumValueTokens
+            + (field.Inline?.Sum(EstimateTokens) ?? 0);
 
         /// <summary>Lowercases the path and strips a leading <c>api/v1/</c> segment (and any surrounding slashes).</summary>
         private static string NormalizePath(string path)

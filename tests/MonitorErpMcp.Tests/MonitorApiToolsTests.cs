@@ -325,6 +325,43 @@ namespace MonitorErpMcp.Tests
         }
 
         [Fact]
+        public void GetRecord_Expand_Full_InlinesDtoFields()
+        {
+            var result = MonitorApiTools.GetRecord(
+                Catalog,
+                clrType: "Monitor.API.Purchase.Commands.ArrivalReporting.ReportArrival",
+                expand: "full");
+
+            var rows = result.Fields.Single(f => f.Name == "Rows");
+            Assert.Equal("dto", rows.Kind);
+            Assert.Equal("Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalRow", rows.RefClrType);
+            Assert.NotNull(rows.Items);
+            Assert.Null(result.ExpandNote);
+        }
+
+        [Fact]
+        public void GetRecord_Expand_Zero_ReturnsRefsOnly()
+        {
+            var result = MonitorApiTools.GetRecord(
+                Catalog,
+                clrType: "Monitor.API.Purchase.Commands.ArrivalReporting.ReportArrival",
+                expand: "0");
+
+            var rows = result.Fields.Single(f => f.Name == "Rows");
+            Assert.Equal("dto", rows.Kind);
+            Assert.Equal("Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalRow", rows.RefClrType);
+            Assert.Null(rows.Items);
+        }
+
+        [Fact]
+        public void GetRecord_Expand_Full_Oversized_TruncatesWithNote()
+        {
+            var result = MonitorApiTools.GetRecord(Catalog, clrType: "Monitor.API.Sales.Customer", expand: "full");
+
+            Assert.Equal("truncated at depth 0 (size guard)", result.ExpandNote);
+        }
+
+        [Fact]
         public void BothTools_AreReadOnly()
         {
             Assert.True(CreateTool(nameof(MonitorApiTools.Search)).ProtocolTool.Annotations?.ReadOnlyHint);

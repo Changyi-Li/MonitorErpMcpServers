@@ -96,6 +96,12 @@ namespace MonitorErpMcp.Catalog.Model
         public IReadOnlyList<string> UsedBy { get; init; } = [];
 
         /// <summary>
+        /// Present when the size guard truncated an inline expansion: <c>"truncated at depth N (size guard)"</c>.
+        /// Only set by <c>CatalogIndex.Expand</c> on the expanded copy; the base catalog never carries it.
+        /// </summary>
+        public string? ExpandNote { get; init; }
+
+        /// <summary>
         /// Queries only: the OData query options the GET endpoint supports. The pinned assembly does not
         /// encode these, so all queries support the standard six — <c>filter</c>, <c>select</c>,
         /// <c>expand</c>, <c>orderby</c>, <c>top</c>, <c>skip</c>.
@@ -208,6 +214,14 @@ namespace MonitorErpMcp.Catalog.Model
 
         /// <summary>Version the field was obsoleted in; <c>null</c> while current.</summary>
         public string? ObsoleteSince { get; init; }
+
+        /// <summary>
+        /// Inline expansion of a dto-kind field: the referenced dto record's expanded fields, so one
+        /// <c>get_record</c> call returns the whole tree. <c>null</c> unless expanded. Whether it
+        /// surfaces as the wire <c>fields</c> (single object) or <c>items</c> (array element) is decided
+        /// by <see cref="JsonType"/> at the envelope edge.
+        /// </summary>
+        public IReadOnlyList<FieldRecord>? Inline { get; init; }
 
         /// <summary>Bilingual description placeholder; hand-authored content fills this in later.</summary>
         public required BilingualText Description { get; init; }
