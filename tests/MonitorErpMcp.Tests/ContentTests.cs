@@ -40,11 +40,11 @@ namespace MonitorErpMcp.Tests
         }
 
         [Fact]
-        public void EveryInventoryAndSalesRecord_HasBilingualIdentity()
+        public void EveryCoveredModuleRecord_HasBilingualIdentity()
         {
-            // T1 pilot coverage: every searchable record in the two piloted modules carries a
-            // bilingual description and non-empty search aliases once merged.
-            foreach (var module in new[] { "Inventory", "Sales" })
+            // T1 coverage: every searchable record in a covered module (the pilots plus Common)
+            // carries a bilingual description and non-empty search aliases once merged.
+            foreach (var module in new[] { "Inventory", "Sales", "Common" })
             {
                 Assert.All(
                     Merged.Records.Where(r => r.Module == module && r.Type != RecordType.Dto),
@@ -59,11 +59,13 @@ namespace MonitorErpMcp.Tests
         }
 
         [Fact]
-        public void OtherModules_CarryNoPilotContent()
+        public void Records_WithoutAuthoredContent_KeepEmptyDescription()
         {
-            // Content is keyed per module: records outside the pilot stay structurally empty.
+            // Content is applied by clrType key, never by module: a record with no authored entry
+            // (e.g. the time-recording Persons records, whose clrType lives under Common.Commands)
+            // keeps its structural empty description — content never leaks onto uncovered records.
             Assert.All(
-                Merged.Records.Where(r => r.Module is not ("Inventory" or "Sales") && r.Type != RecordType.Dto),
+                Merged.Records.Where(r => r.Type != RecordType.Dto && !CatalogContent.ByClrType.ContainsKey(r.ClrType)),
                 r => Assert.Equal(string.Empty, r.Description.En));
         }
 
@@ -123,6 +125,56 @@ namespace MonitorErpMcp.Tests
 
             var customer = Merged.Search("客户");
             Assert.Contains(customer.Results, r => r.ClrType == "Monitor.API.Sales.Customer");
+        }
+
+        [Fact]
+        public void CommonQuery_ReceivesAuthoredBilingualDescriptionAndAliases()
+        {
+            var project = Merged.GetByClrType("Monitor.API.Common.Project")!;
+
+            Assert.Contains("phases", project.Description.En);
+            Assert.Contains("阶段", project.Description.Zh);
+            Assert.Contains("project", project.Aliases.En);
+            Assert.Contains("项目", project.Aliases.Zh);
+        }
+
+        [Fact]
+        public void CommonCommand_ReceivesAuthoredContent()
+        {
+            var create = Merged.GetByClrType("Monitor.API.Common.Commands.Projects.CreateProject")!;
+
+            Assert.Equal("Create a new project.", create.Description.En);
+            Assert.Equal("创建新项目。", create.Description.Zh);
+            Assert.Contains("新建项目", create.Aliases.Zh);
+
+            // T2: a mandatory request-input field carries its authored description.
+            var code = create.Fields.Single(f => f.Name == "Code");
+            Assert.Equal("The unique project number.", code.Description.En);
+            Assert.Equal("唯一的项目编号。", code.Description.Zh);
+        }
+
+        [Fact]
+        public void CommonSearch_MatchesChineseAliases()
+        {
+            // Discovery must work for Chinese-language prompts in the Common area too.
+            Assert.Contains(Merged.Search("项目").Results, r => r.ClrType == "Monitor.API.Common.Project");
+            Assert.Contains(Merged.Search("员工").Results, r => r.ClrType == "Monitor.API.Common.Person");
+            Assert.Contains(Merged.Search("货币").Results, r => r.ClrType == "Monitor.API.Common.Currency");
+        }
+
+        [Fact]
+        public void CommonDto_CarriesFieldDescriptionsOnly()
+        {
+            var comment = Merged.GetByClrType("Monitor.API.Common.Commands.Shared.SetComment")!;
+
+            // dto records are not searchable: no record description, no aliases.
+            Assert.Equal(string.Empty, comment.Description.En);
+            Assert.Empty(comment.Aliases.En);
+
+            // ... but their request-input fields carry the authored descriptions.
+            var text = comment.Fields.Single(f => f.Name == "Text");
+            Assert.Equal("The formatted text of the comment.", text.Description.En);
+            Assert.Equal("评论的格式化文本。", text.Description.Zh);
         }
 
         [Fact]
