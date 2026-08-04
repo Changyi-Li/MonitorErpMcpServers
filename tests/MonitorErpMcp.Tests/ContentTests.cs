@@ -42,9 +42,9 @@ namespace MonitorErpMcp.Tests
         [Fact]
         public void EveryCoveredModuleRecord_HasBilingualIdentity()
         {
-            // T1 coverage: every searchable record in a covered module (the pilots plus Common
-            // and Manufacturing) carries a bilingual description and non-empty search aliases.
-            foreach (var module in new[] { "Inventory", "Sales", "Common", "Manufacturing" })
+            // T1 coverage: every searchable record in a covered module (the pilots plus Common,
+            // Manufacturing, and Purchase) carries a bilingual description and non-empty search aliases.
+            foreach (var module in new[] { "Inventory", "Sales", "Common", "Manufacturing", "Purchase" })
             {
                 Assert.All(
                     Merged.Records.Where(r => r.Module == module && r.Type != RecordType.Dto),
@@ -225,6 +225,56 @@ namespace MonitorErpMcp.Tests
             var quantity = rejection.Fields.Single(f => f.Name == "RejectedQuantity");
             Assert.Equal("The rejected quantity.", quantity.Description.En);
             Assert.Equal("拒收数量。", quantity.Description.Zh);
+        }
+
+        [Fact]
+        public void PurchaseQuery_ReceivesAuthoredBilingualDescriptionAndAliases()
+        {
+            var order = Merged.GetByClrType("Monitor.API.Purchase.PurchaseOrder")!;
+
+            Assert.Contains("supplier", order.Description.En);
+            Assert.Contains("供应商", order.Description.Zh);
+            Assert.Contains("purchase order", order.Aliases.En);
+            Assert.Contains("采购订单", order.Aliases.Zh);
+        }
+
+        [Fact]
+        public void PurchaseCommand_ReceivesAuthoredContent()
+        {
+            var create = Merged.GetByClrType("Monitor.API.Purchase.Commands.PurchaseOrders.CreatePurchaseOrder")!;
+
+            Assert.Equal("Create a purchase order.", create.Description.En);
+            Assert.Equal("创建采购订单。", create.Description.Zh);
+            Assert.Contains("新建采购订单", create.Aliases.Zh);
+
+            // T2: a mandatory request-input field carries its authored description.
+            var rows = create.Fields.Single(f => f.Name == "Rows");
+            Assert.Equal("The rows of the purchase order.", rows.Description.En);
+            Assert.Equal("采购订单的行。", rows.Description.Zh);
+        }
+
+        [Fact]
+        public void PurchaseSearch_MatchesChineseAliases()
+        {
+            // Discovery must work for Chinese-language prompts in the Purchase area too.
+            Assert.Contains(Merged.Search("供应商").Results, r => r.ClrType == "Monitor.API.Purchase.Supplier");
+            Assert.Contains(Merged.Search("询价单").Results, r => r.ClrType == "Monitor.API.Purchase.Inquiry");
+            Assert.Contains(Merged.Search("采购订单").Results, r => r.ClrType == "Monitor.API.Purchase.PurchaseOrder");
+        }
+
+        [Fact]
+        public void PurchaseDto_CarriesFieldDescriptionsOnly()
+        {
+            var arrivalRow = Merged.GetByClrType("Monitor.API.Purchase.Commands.ArrivalReporting.ArrivalRow")!;
+
+            // dto records are not searchable: no record description, no aliases.
+            Assert.Equal(string.Empty, arrivalRow.Description.En);
+            Assert.Empty(arrivalRow.Aliases.En);
+
+            // ... but their request-input fields carry the authored descriptions.
+            var quantity = arrivalRow.Fields.Single(f => f.Name == "Quantity");
+            Assert.Equal("The arrived quantity.", quantity.Description.En);
+            Assert.Equal("到货数量。", quantity.Description.Zh);
         }
 
         [Fact]
