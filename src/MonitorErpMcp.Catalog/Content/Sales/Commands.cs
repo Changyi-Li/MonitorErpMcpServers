@@ -3,6 +3,7 @@ namespace MonitorErpMcp.Catalog.Content.Sales
     // The using-static sits inside the namespace so the imported Content(...) builder binds before
     // the enclosing MonitorErpMcp.Catalog.Content namespace in simple-name lookup.
     using static MonitorErpMcp.Catalog.Content.ContentEntryFactory;
+    using MonitorErpMcp.Catalog.Model;
 
     /// <summary>
     /// Hand-authored content for Sales command records: bilingual descriptions and search aliases
@@ -211,7 +212,16 @@ namespace MonitorErpMcp.Catalog.Content.Sales
                 "Monitor.API.Sales.Commands.CustomerOrders.CreateCustomerOrder",
                 "Create a new customer order.",
                 "创建新的客户订单。",
-                ["create order", "new customer order"], ["新建客户订单", "创建订单"]),
+                ["create order", "new customer order"], ["新建客户订单", "创建订单"],
+                examples: [
+                    Example(ExampleKind.Command,
+                        "Create a customer order", "创建客户订单",
+                        "Creates a new customer order with its rows.",
+                        "创建带行的新客户订单。",
+                        "api/v1/Sales/CustomerOrders/Create", "POST",
+                        request: new { CustomerId = 1000, OrderNumber = "SO-5000", Rows = new[] { new { PartId = 1, Quantity = 10m, PriceEach = 12.5m } } },
+                        response: new { RootEntityId = 5000 }),
+                ]),
             Content(
                 "Monitor.API.Sales.Commands.CustomerOrders.CreatePurchaseOrderFromCustomerOrderRow",
                 "Create a purchase order from a customer order row.",
@@ -276,7 +286,16 @@ namespace MonitorErpMcp.Catalog.Content.Sales
                 "Monitor.API.Sales.Commands.DeliveryReporting.ReportDelivery",
                 "Report a delivery against a customer order.",
                 "针对客户订单上报交货。",
-                ["report delivery", "deliver"], ["上报交货", "交货"]),
+                ["report delivery", "deliver"], ["上报交货", "交货"],
+                examples: [
+                    Example(ExampleKind.Command,
+                        "Report a delivery", "上报交货",
+                        "Reports a delivered quantity for a customer order row.",
+                        "上报客户订单行已交货的数量。",
+                        "api/v1/Sales/CustomerOrders/ReportDeliveries", "POST",
+                        request: new { DeliveryDate = "2026-08-04T00:00:00Z", Rows = new[] { new { CustomerOrderRowId = 5000, Quantity = 10m, DeleteFutureRest = true } } },
+                        response: new { RootEntityId = 5000 }),
+                ]),
             Content(
                 "Monitor.API.Sales.Commands.CustomerOrders.SetAftermarketProductRecord",
                 "Set the aftermarket product record on a customer order row.",
@@ -388,7 +407,45 @@ namespace MonitorErpMcp.Catalog.Content.Sales
                 "Monitor.API.Sales.Commands.Customers.CreateCustomer",
                 "Create a new customer master record.",
                 "创建新的客户主记录。",
-                ["create customer", "new customer"], ["新建客户", "创建客户"]),
+                ["create customer", "new customer"], ["新建客户", "创建客户"],
+                examples: [
+                    Example(ExampleKind.Command,
+                        "Create a customer", "创建客户",
+                        "Creates a new customer master record and returns its id.",
+                        "创建新的客户主记录并返回其 id。",
+                        "api/v1/Sales/Customers/Create", "POST",
+                        request: new { Name = "Example AB", Code = "C-1000" },
+                        response: new { RootEntityId = 1000 }),
+                    Example(ExampleKind.Many,
+                        "Create several customers", "批量创建客户",
+                        "Creates multiple customers in one request via the /Many route; each array element is one customer.",
+                        "通过 /Many 路由在一次请求中创建多个客户；数组的每个元素为一个客户。",
+                        "api/v1/Sales/Customers/Create/Many", "POST",
+                        request: new object[]
+                        {
+                            new { Name = "Example AB", Code = "C-1000" },
+                            new { Name = "Example CD", Code = "C-1001" },
+                        },
+                        response: new object[0]),
+                    Example(ExampleKind.Batch,
+                        "Create a customer with references and properties", "创建客户并添加引用与属性",
+                        "Creates a customer, adds a reference, sets properties, then reads it back — one /api/v1/Batch request, forwarding RootEntityId between steps.",
+                        "在一次 /api/v1/Batch 请求中创建客户、添加引用、设置属性，然后回读；步骤之间传递 RootEntityId。",
+                        steps: [
+                            Step("api/v1/Sales/Customers/Create", "POST",
+                                new { Name = "Example AB", Code = "C-1000" },
+                                "Creates the customer; its RootEntityId feeds the next steps.", "创建客户；其 RootEntityId 供后续步骤使用。"),
+                            Step("api/v1/Sales/Customers/AddReference", "POST",
+                                new { CustomerId = 1000, Name = "Phone: 070-123 45 67", Note = "Primary contact" },
+                                "Adds a reference to the new customer, forwarding RootEntityId into CustomerId.", "为新客户添加引用，将 RootEntityId 传递为 CustomerId。"),
+                            Step("api/v1/Sales/Customers/SetProperties", "POST",
+                                new { CustomerId = 1000, CreditLimit = new { Value = 10000m } },
+                                "Sets properties on the new customer.", "为新客户设置属性。"),
+                            Step("api/v1/Sales/Customers", "GET",
+                                new { Id = 1000 },
+                                "Reads the customer back to confirm.", "回读客户以确认。"),
+                        ]),
+                ]),
             Content(
                 "Monitor.API.Sales.Commands.Customers.CreateInvoiceAddressCustomer",
                 "Create an invoice address for a customer.",
@@ -681,7 +738,16 @@ namespace MonitorErpMcp.Catalog.Content.Sales
                 "Monitor.API.Sales.Commands.Quotes.CreateQuote",
                 "Create a new quote.",
                 "创建新的报价。",
-                ["create quote", "new quote"], ["新建报价", "创建报价"]),
+                ["create quote", "new quote"], ["新建报价", "创建报价"],
+                examples: [
+                    Example(ExampleKind.Command,
+                        "Create a quote", "创建报价",
+                        "Creates a new quote with its rows.",
+                        "创建带行的新报价。",
+                        "api/v1/Sales/Quotes/Create", "POST",
+                        request: new { CustomerId = 1000, QuoteNumber = "Q-1000", Rows = new[] { new { PartId = 1, Quantity = 10m, PriceEach = 12.5m } } },
+                        response: new { RootEntityId = 7000 }),
+                ]),
             Content(
                 "Monitor.API.Sales.Commands.Quotes.CreateOrderFromQuote",
                 "Create a customer order from a quote.",

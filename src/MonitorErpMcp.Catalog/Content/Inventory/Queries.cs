@@ -3,6 +3,7 @@ namespace MonitorErpMcp.Catalog.Content.Inventory
     // The using-static sits inside the namespace so the imported Content(...) builder binds before
     // the enclosing MonitorErpMcp.Catalog.Content namespace in simple-name lookup.
     using static MonitorErpMcp.Catalog.Content.ContentEntryFactory;
+    using MonitorErpMcp.Catalog.Model;
 
     /// <summary>
     /// Hand-authored content for Inventory query records: bilingual descriptions and search aliases
@@ -187,7 +188,16 @@ namespace MonitorErpMcp.Catalog.Content.Inventory
                 "Monitor.API.Inventory.Part",
                 "The part master record — a material, component, or spare part held in inventory, with its stock, pricing, and planning information.",
                 "物料主记录 —— 库存中管理的物料、组件或备件，含库存、价格与计划信息。",
-                ["part", "component", "item", "material", "article", "spare part"], ["物料", "零件", "组件", "材料", "物品", "备件"]),
+                ["part", "component", "item", "material", "article", "spare part"], ["物料", "零件", "组件", "材料", "物品", "备件"],
+                examples: [
+                    Example(ExampleKind.Query,
+                        "List parts", "查询物料",
+                        "Lists the parts in inventory; use the OData query options to filter and page.",
+                        "列出库存中的物料；可使用 OData 查询选项筛选和分页。",
+                        "api/v1/Inventory/Parts", "GET",
+                        query: "$filter=PartNumber eq 'PART-1000'",
+                        response: new { value = new[] { new { Id = 1000, PartNumber = "PART-1000", Description = "Example part" } } }),
+                ]),
             Content(
                 "Monitor.API.Inventory.PhysicalInventoryList",
                 "Lists for physical inventory (stock count) rounds, with their status.",

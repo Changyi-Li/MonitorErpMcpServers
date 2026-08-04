@@ -46,7 +46,8 @@ namespace MonitorErpMcp.Catalog.Model
         string? ExpandNote,
         IReadOnlyList<string> UsedBy,
         BilingualText Description,
-        IReadOnlyList<MonitorApiField> Fields);
+        IReadOnlyList<MonitorApiField> Fields,
+        IReadOnlyList<MonitorApiExample> Examples);
 
     /// <summary>
     /// One field of a record with its generic wire type (<c>jsonType</c>/<c>format</c>), classification
@@ -76,6 +77,28 @@ namespace MonitorErpMcp.Catalog.Model
         IReadOnlyList<MonitorApiField>? Fields,
         IReadOnlyList<MonitorApiField>? Items,
         BilingualText Description);
+
+    /// <summary>One step of a batch example in the MCP-visible envelope.</summary>
+    public sealed record MonitorApiBatchStep(
+        string Route,
+        string Method,
+        object? Request,
+        BilingualText? Note);
+
+    /// <summary>
+    /// One example in the MCP-visible envelope: a query/command/many/batch call with an explicit
+    /// <c>kind</c>, bilingual title and explanation, and the request/response (or batch steps).
+    /// </summary>
+    public sealed record MonitorApiExample(
+        string Kind,
+        BilingualText Title,
+        BilingualText Explanation,
+        string? Route,
+        string? Method,
+        string? Query,
+        object? Request,
+        object? Response,
+        IReadOnlyList<MonitorApiBatchStep>? Steps);
 
     /// <summary>An enum field's numeric value vocabulary in the MCP-visible envelope.</summary>
     public sealed record MonitorApiFieldEnum(

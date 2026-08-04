@@ -3,6 +3,7 @@ namespace MonitorErpMcp.Catalog.Content.Inventory
     // The using-static sits inside the namespace so the imported Content(...) builder binds before
     // the enclosing MonitorErpMcp.Catalog.Content namespace in simple-name lookup.
     using static MonitorErpMcp.Catalog.Content.ContentEntryFactory;
+    using MonitorErpMcp.Catalog.Model;
 
     /// <summary>
     /// Hand-authored content for Inventory command records: bilingual descriptions and search aliases
@@ -257,7 +258,27 @@ namespace MonitorErpMcp.Catalog.Content.Inventory
                 "Monitor.API.Inventory.Commands.Parts.CreatePart",
                 "Create a new part in inventory.",
                 "在库存中创建新物料。",
-                ["create part", "new part"], ["新建物料", "创建物料"]),
+                ["create part", "new part"], ["新建物料", "创建物料"],
+                examples: [
+                    Example(ExampleKind.Command,
+                        "Create a part", "创建物料",
+                        "Creates a new part master record and returns its id.",
+                        "创建新的物料主记录并返回其 id。",
+                        "api/v1/Inventory/Parts/Create", "POST",
+                        request: new { PartNumber = "PART-1000", StandardUnitId = 1, Type = 0 },
+                        response: new { RootEntityId = 1000 }),
+                    Example(ExampleKind.Many,
+                        "Create several parts", "批量创建物料",
+                        "Creates multiple parts in one request via the /Many route; each array element is one part.",
+                        "通过 /Many 路由在一次请求中创建多个物料；数组的每个元素为一个物料。",
+                        "api/v1/Inventory/Parts/Create/Many", "POST",
+                        request: new object[]
+                        {
+                            new { PartNumber = "PART-1000", StandardUnitId = 1, Type = 0 },
+                            new { PartNumber = "PART-1001", StandardUnitId = 2, Type = 1 },
+                        },
+                        response: new object[0]),
+                ]),
             Content(
                 "Monitor.API.Inventory.Commands.Parts.CreateHyperLink",
                 "Create a hyperlink on a part.",
@@ -302,7 +323,16 @@ namespace MonitorErpMcp.Catalog.Content.Inventory
                 "Monitor.API.Inventory.Commands.Parts.MoveStockBalance",
                 "Move stock balance between locations for a part.",
                 "在物料的不同库位之间移动库存余额。",
-                ["move stock", "transfer stock"], ["移动库存", "转移库存"]),
+                ["move stock", "transfer stock"], ["移动库存", "转移库存"],
+                examples: [
+                    Example(ExampleKind.Command,
+                        "Move stock between locations", "在库位之间转移库存",
+                        "Moves a quantity of a part from one location to another.",
+                        "将物料的一定数量从一个库位移至另一个库位。",
+                        "api/v1/Inventory/Parts/MoveStockBalance", "POST",
+                        request: new { PartId = 1000, FromLocationKey = new { PartLocationId = 100 }, ToPartLocations = new[] { new { Name = "LOC-A", Amount = 5m } } },
+                        response: new { RootEntityId = 1000 }),
+                ]),
             Content(
                 "Monitor.API.Inventory.Commands.Parts.ReactivatePart",
                 "Reactivate an inactivated part.",
@@ -407,7 +437,16 @@ namespace MonitorErpMcp.Catalog.Content.Inventory
                 "Monitor.API.Inventory.Commands.Parts.SetPropertiesPart",
                 "Set the properties of an existing part.",
                 "设置现有物料的属性。",
-                ["set properties", "update part"], ["设置属性", "更新物料"]),
+                ["set properties", "update part"], ["设置属性", "更新物料"],
+                examples: [
+                    Example(ExampleKind.Command,
+                        "Update a part's properties", "更新物料属性",
+                        "Updates the properties of an existing part master record.",
+                        "更新现有物料主记录的属性。",
+                        "api/v1/Inventory/Parts/SetProperties", "POST",
+                        request: new { PartId = 1000, StandardPrice = new { Value = 12.5m }, Description = new { Value = "Updated description" } },
+                        response: new { RootEntityId = 1000 }),
+                ]),
             Content(
                 "Monitor.API.Inventory.Commands.Parts.StockCount",
                 "Report the result of a physical stock count for a part.",

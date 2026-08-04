@@ -3,6 +3,7 @@ namespace MonitorErpMcp.Catalog.Content.Sales
     // The using-static sits inside the namespace so the imported Content(...) builder binds before
     // the enclosing MonitorErpMcp.Catalog.Content namespace in simple-name lookup.
     using static MonitorErpMcp.Catalog.Content.ContentEntryFactory;
+    using MonitorErpMcp.Catalog.Model;
 
     /// <summary>
     /// Hand-authored content for Sales query records: bilingual descriptions and search aliases
@@ -152,7 +153,16 @@ namespace MonitorErpMcp.Catalog.Content.Sales
                 "Monitor.API.Sales.CustomerOrder",
                 "A customer order — the commercial agreement to deliver parts to a customer.",
                 "客户订单 —— 向客户交付物料的商业协议。",
-                ["customer order", "sales order", "order"], ["客户订单", "销售订单", "订单"]),
+                ["customer order", "sales order", "order"], ["客户订单", "销售订单", "订单"],
+                examples: [
+                    Example(ExampleKind.Query,
+                        "List customer orders", "查询客户订单",
+                        "Lists customer orders; use the OData query options to filter by customer.",
+                        "列出客户订单；可使用 OData 查询选项按客户筛选。",
+                        "api/v1/Sales/CustomerOrders", "GET",
+                        query: "$filter=CustomerId eq 1000",
+                        response: new { value = new[] { new { Id = 5000, CustomerId = 1000, OrderDate = "2026-08-04T00:00:00Z" } } }),
+                ]),
             Content(
                 "Monitor.API.Sales.CustomerPartLink",
                 "The link between a customer and the parts it buys.",
@@ -182,7 +192,16 @@ namespace MonitorErpMcp.Catalog.Content.Sales
                 "Monitor.API.Sales.Customer",
                 "The customer master record with invoicing, delivery, and contact information.",
                 "客户主记录，含开票、交货与联系信息。",
-                ["customer", "client", "account", "debtor"], ["客户", "顾客", "客户主数据"]),
+                ["customer", "client", "account", "debtor"], ["客户", "顾客", "客户主数据"],
+                examples: [
+                    Example(ExampleKind.Query,
+                        "List customers", "查询客户",
+                        "Lists the customer master records; use the OData query options to filter.",
+                        "列出客户主记录；可使用 OData 查询选项筛选。",
+                        "api/v1/Sales/Customers", "GET",
+                        query: "$filter=Name eq 'Example AB'",
+                        response: new { value = new[] { new { Id = 1000, Code = "C-1000", Name = "Example AB" } } }),
+                ]),
             Content(
                 "Monitor.API.Sales.InvoiceLog",
                 "The log of invoices created and printed.",
@@ -232,7 +251,16 @@ namespace MonitorErpMcp.Catalog.Content.Sales
                 "Monitor.API.Sales.Quote",
                 "A quote — the offered price and delivery of parts to a customer before an order.",
                 "报价 —— 在订单之前向客户提供的物料价格与交货。",
-                ["quote", "quotation", "offer"], ["报价", "报价单"]),
+                ["quote", "quotation", "offer"], ["报价", "报价单"],
+                examples: [
+                    Example(ExampleKind.Query,
+                        "List quotes", "查询报价",
+                        "Lists quotes; use the OData query options to filter by customer.",
+                        "列出报价；可使用 OData 查询选项按客户筛选。",
+                        "api/v1/Sales/Quotes", "GET",
+                        query: "$filter=CustomerId eq 1000",
+                        response: new { value = new[] { new { Id = 7000, CustomerId = 1000, OrderNumber = "Q-1000" } } }),
+                ]),
             Content(
                 "Monitor.API.Sales.ReasonCodeLostQuote",
                 "Reason codes recorded when a quote is lost.",

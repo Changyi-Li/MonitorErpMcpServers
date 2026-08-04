@@ -21,7 +21,8 @@ namespace MonitorErpMcp.Catalog.Content
             string? descriptionZh = null,
             IReadOnlyList<string>? aliasesEn = null,
             IReadOnlyList<string>? aliasesZh = null,
-            IEnumerable<FieldDescription>? fields = null)
+            IEnumerable<FieldDescription>? fields = null,
+            IEnumerable<CatalogExample>? examples = null)
         {
             var description = descriptionEn is null && descriptionZh is null
                 ? null
@@ -41,6 +42,7 @@ namespace MonitorErpMcp.Catalog.Content
                     f => f.Field,
                     f => new BilingualText { En = f.En, Zh = f.Zh },
                     StringComparer.Ordinal) ?? new Dictionary<string, BilingualText>(StringComparer.Ordinal),
+                Examples = examples?.ToList() ?? [],
             };
         }
 
@@ -49,5 +51,50 @@ namespace MonitorErpMcp.Catalog.Content
         /// <c>zh</c> is required so every authored field is bilingual, as the coverage tiers demand.
         /// </summary>
         public static FieldDescription F(string field, string en, string zh) => new(field, en, zh);
+
+        /// <summary>
+        /// Builds one hand-authored example (en first, zh second) for use in <c>Content(... examples:)</c>.
+        /// A query/command example carries a route, method, and body; a many example carries an array
+        /// request on the <c>/Many</c> route; a batch example carries ordered <see cref="Step"/>s.
+        /// </summary>
+        public static CatalogExample Example(
+            ExampleKind kind,
+            string titleEn,
+            string titleZh,
+            string explanationEn,
+            string explanationZh,
+            string? route = null,
+            string? method = null,
+            string? query = null,
+            object? request = null,
+            object? response = null,
+            IEnumerable<BatchExampleStep>? steps = null) => new()
+        {
+            Kind = kind,
+            Title = new BilingualText { En = titleEn, Zh = titleZh },
+            Explanation = new BilingualText { En = explanationEn, Zh = explanationZh },
+            Route = route,
+            Method = method,
+            Query = query,
+            Request = request,
+            Response = response,
+            Steps = steps?.ToList(),
+        };
+
+        /// <summary>Builds one step of a batch example; the optional bilingual note explains how it forwards values from prior steps.</summary>
+        public static BatchExampleStep Step(
+            string route,
+            string method,
+            object? request = null,
+            string? noteEn = null,
+            string? noteZh = null) => new()
+        {
+            Route = route,
+            Method = method,
+            Request = request,
+            Note = noteEn is null && noteZh is null
+                ? null
+                : new BilingualText { En = noteEn ?? string.Empty, Zh = noteZh ?? string.Empty },
+        };
     }
 }

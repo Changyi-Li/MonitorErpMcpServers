@@ -34,6 +34,72 @@ namespace MonitorErpMcp.Catalog.Model
         public IReadOnlyList<string> Zh { get; init; } = [];
     }
 
+    /// <summary>The family of a catalog example: a single query/command call, a batched many call, or a batch chain.</summary>
+    public enum ExampleKind
+    {
+        /// <summary>A single GET query call.</summary>
+        Query,
+
+        /// <summary>A single POST command call.</summary>
+        Command,
+
+        /// <summary>A batched call to a batchable command's <c>/Many</c> route: an array body, one element per invocation.</summary>
+        Many,
+
+        /// <summary>A multi-step chain executed in one <c>/api/v1/Batch</c> request (e.g. CreateCustomer).</summary>
+        Batch,
+    }
+
+    /// <summary>One step of a <see cref="ExampleKind.Batch"/> example: a single command (or read-back query) in the chain.</summary>
+    public sealed record BatchExampleStep
+    {
+        /// <summary>The route of this step, e.g. <c>api/v1/Sales/Customers/Create</c>.</summary>
+        public required string Route { get; init; }
+
+        /// <summary><c>POST</c> for commands; <c>GET</c> for a read-back query.</summary>
+        public required string Method { get; init; }
+
+        /// <summary>The request body of this step.</summary>
+        public object? Request { get; init; }
+
+        /// <summary>Bilingual note, e.g. how a step forwards a value from a previous step.</summary>
+        public BilingualText? Note { get; init; }
+    }
+
+    /// <summary>
+    /// A hand-authored or derived example of a query, command, many, or batch call, with an explicit
+    /// <see cref="Kind"/> so an agent can select the right one.
+    /// </summary>
+    public sealed record CatalogExample
+    {
+        /// <summary><c>query</c> / <c>command</c> / <c>many</c> / <c>batch</c>.</summary>
+        public required ExampleKind Kind { get; init; }
+
+        /// <summary>Bilingual short title.</summary>
+        public required BilingualText Title { get; init; }
+
+        /// <summary>Bilingual explanation of what the call does.</summary>
+        public required BilingualText Explanation { get; init; }
+
+        /// <summary>The call's route; for a many example this is the command route with the <c>/Many</c> suffix.</summary>
+        public string? Route { get; init; }
+
+        /// <summary><c>GET</c> or <c>POST</c>.</summary>
+        public string? Method { get; init; }
+
+        /// <summary>The optional URL query string of a query example (e.g. an OData filter).</summary>
+        public string? Query { get; init; }
+
+        /// <summary>The request body; for a many example an array with one element per invocation.</summary>
+        public object? Request { get; init; }
+
+        /// <summary>The response body; for a many example an array.</summary>
+        public object? Response { get; init; }
+
+        /// <summary>Batch examples only: the ordered steps of the chain.</summary>
+        public IReadOnlyList<BatchExampleStep>? Steps { get; init; }
+    }
+
     /// <summary>The classification of a field, implied by its CLR type and attributes.</summary>
     public enum FieldKind
     {
@@ -168,6 +234,13 @@ namespace MonitorErpMcp.Catalog.Model
         /// matches these in addition to the structural identity fields.
         /// </summary>
         public SearchAliases Aliases { get; init; } = new();
+
+        /// <summary>
+        /// Examples of how to call the record, each with an explicit kind. Queries/commands carry
+        /// hand-authored examples; every batchable command also carries a derived or authored
+        /// <see cref="ExampleKind.Many"/> example. Surfaced by <c>monitor_api_get_record</c>.
+        /// </summary>
+        public IReadOnlyList<CatalogExample> Examples { get; init; } = [];
     }
 
     /// <summary>

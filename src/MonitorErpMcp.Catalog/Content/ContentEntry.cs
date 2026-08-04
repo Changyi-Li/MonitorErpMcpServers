@@ -32,5 +32,11 @@ namespace MonitorErpMcp.Catalog.Content
         /// <summary>Bilingual field descriptions keyed by field name; empty when none are authored.</summary>
         public IReadOnlyDictionary<string, BilingualText> FieldDescriptions { get; init; } =
             new Dictionary<string, BilingualText>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Hand-authored examples (curated query/command, tailored many, batch chains). Empty when
+        /// none are authored; every batchable command without one gets a derived many example.
+        /// </summary>
+        public IReadOnlyList<CatalogExample> Examples { get; init; } = [];
     }
 }

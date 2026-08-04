@@ -161,7 +161,8 @@ namespace MonitorErpMcp.Server.Tools
                 ExpandNote: record.ExpandNote,
                 UsedBy: record.UsedBy,
                 Description: record.Description,
-                Fields: record.Fields.Select(ToField).ToList());
+                Fields: record.Fields.Select(ToField).ToList(),
+                Examples: record.Examples.Select(ToExample).ToList());
 
         private static MonitorApiField ToField(FieldRecord field) =>
             new(
@@ -194,6 +195,21 @@ namespace MonitorErpMcp.Server.Tools
                     fieldEnum.ClrType,
                     fieldEnum.Values.Select(v => new MonitorApiEnumValue(v.Name, v.Value)).ToList());
 
+        private static MonitorApiExample ToExample(CatalogExample example) =>
+            new(
+                WireExampleKindName(example.Kind),
+                example.Title,
+                example.Explanation,
+                example.Route,
+                example.Method,
+                example.Query,
+                example.Request,
+                example.Response,
+                example.Steps?.Select(ToBatchStep).ToList());
+
+        private static MonitorApiBatchStep ToBatchStep(BatchExampleStep step) =>
+            new(step.Route, step.Method, step.Request, step.Note);
+
         /// <summary>The MCP-visible wire name for a record family.</summary>
         private static string WireTypeName(RecordType type) => type switch
         {
@@ -212,6 +228,16 @@ namespace MonitorErpMcp.Server.Tools
             FieldKind.InputWrapper => "inputWrapper",
             FieldKind.NestedCommand => "nestedCommand",
             _ => "dto",
+        };
+
+        /// <summary>The MCP-visible wire name for an example kind; an unknown member fails loudly rather than being silently mislabeled.</summary>
+        private static string WireExampleKindName(ExampleKind kind) => kind switch
+        {
+            ExampleKind.Query => "query",
+            ExampleKind.Command => "command",
+            ExampleKind.Many => "many",
+            ExampleKind.Batch => "batch",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown example kind."),
         };
 
         private static MonitorApiSearchResult ToSearchResult(CatalogRecord record) =>
