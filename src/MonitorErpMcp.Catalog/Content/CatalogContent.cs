@@ -20,6 +20,9 @@ namespace MonitorErpMcp.Catalog.Content
             .. Common.Queries.Entries,
             .. Common.Commands.Entries,
             .. Common.Dtos.Entries,
+            .. Manufacturing.Queries.Entries,
+            .. Manufacturing.Commands.Entries,
+            .. Manufacturing.Dtos.Entries,
         ];
 
         /// <summary>Content keyed by <see cref="ContentEntry.ClrType"/> (case-insensitive), for <c>ContentMerger.Apply</c>.</summary>
