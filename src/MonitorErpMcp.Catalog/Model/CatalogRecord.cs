@@ -23,6 +23,17 @@ namespace MonitorErpMcp.Catalog.Model
         public string Zh { get; init; } = string.Empty;
     }
 
+    /// <summary>
+    /// Bilingual hand-authored search aliases for a record: extra keywords (en and zh) that
+    /// <c>monitor_api_search</c> matches in addition to name/CLR type/full path/route, so discovery
+    /// works for synonyms and Chinese-language prompts (e.g. <c>物料</c> for Part).
+    /// </summary>
+    public sealed record SearchAliases
+    {
+        public IReadOnlyList<string> En { get; init; } = [];
+        public IReadOnlyList<string> Zh { get; init; } = [];
+    }
+
     /// <summary>The classification of a field, implied by its CLR type and attributes.</summary>
     public enum FieldKind
     {
@@ -149,8 +160,14 @@ namespace MonitorErpMcp.Catalog.Model
         /// </summary>
         public IReadOnlyList<FieldRecord> Fields { get; init; } = [];
 
-        /// <summary>Bilingual description placeholder; hand-authored content fills this in later.</summary>
+        /// <summary>Bilingual description; hand-authored content fills this in via the content merger.</summary>
         public required BilingualText Description { get; init; }
+
+        /// <summary>
+        /// Bilingual hand-authored search aliases. Empty until content merges; <c>monitor_api_search</c>
+        /// matches these in addition to the structural identity fields.
+        /// </summary>
+        public SearchAliases Aliases { get; init; } = new();
     }
 
     /// <summary>

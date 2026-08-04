@@ -107,8 +107,9 @@ namespace MonitorErpMcp.Tests
             Assert.Equal("api/v1/Inventory/Parts/Create", create.Route);
             Assert.Equal("POST", create.Method);
             Assert.Equal("Inventory/Parts/Create", create.FullPath);
-            Assert.Equal(string.Empty, create.Description.En);
-            Assert.Equal(string.Empty, create.Description.Zh);
+            // The merged catalog carries the authored bilingual description on every search hit.
+            Assert.Equal("Create a new part in inventory.", create.Description.En);
+            Assert.Equal("在库存中创建新物料。", create.Description.Zh);
         }
 
         [Fact]

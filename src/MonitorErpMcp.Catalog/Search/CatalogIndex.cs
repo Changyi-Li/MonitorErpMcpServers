@@ -240,7 +240,7 @@ namespace MonitorErpMcp.Catalog.Search
                     g.Count(r => r.Type == RecordType.Command)))
                 .ToList();
 
-        /// <summary>The identity fields a keyword may match.</summary>
+        /// <summary>The identity fields a keyword may match: structural identity plus hand-authored aliases (en, zh).</summary>
         private static IEnumerable<string> SearchableFields(CatalogRecord record)
         {
             yield return record.Name;
@@ -253,6 +253,11 @@ namespace MonitorErpMcp.Catalog.Search
             if (record.Route is not null)
             {
                 yield return record.Route;
+            }
+
+            foreach (var alias in record.Aliases.En.Concat(record.Aliases.Zh))
+            {
+                yield return alias;
             }
         }
 
