@@ -29,6 +29,9 @@ namespace MonitorErpMcp.Catalog.Content
             .. Accounting.Queries.Entries,
             .. Accounting.Commands.Entries,
             .. Accounting.Dtos.Entries,
+            .. TimeRecording.Queries.Entries,
+            .. TimeRecording.Commands.Entries,
+            .. TimeRecording.Dtos.Entries,
         ];
 
         /// <summary>Content keyed by <see cref="ContentEntry.ClrType"/> (case-insensitive), for <c>ContentMerger.Apply</c>.</summary>

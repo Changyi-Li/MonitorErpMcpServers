@@ -44,7 +44,7 @@ namespace MonitorErpMcp.Tests
         {
             // T1 coverage: every searchable record in a covered module (the pilots plus Common,
             // Manufacturing, and Purchase) carries a bilingual description and non-empty search aliases.
-            foreach (var module in new[] { "Inventory", "Sales", "Common", "Manufacturing", "Purchase", "Accounting" })
+            foreach (var module in new[] { "Inventory", "Sales", "Common", "Manufacturing", "Purchase", "Accounting", "TimeRecording" })
             {
                 Assert.All(
                     Merged.Records.Where(r => r.Module == module && r.Type != RecordType.Dto),
@@ -380,6 +380,62 @@ namespace MonitorErpMcp.Tests
             var codingEntry = voucherRow.Fields.Single(f => f.Name == "CodingEntry");
             Assert.Equal("The coding entry (account and dimensions) of the voucher row.", codingEntry.Description.En);
             Assert.Equal("凭证行的记账条目（科目与维度）。", codingEntry.Description.Zh);
+        }
+
+        [Fact]
+        public void TimeRecordingQuery_ReceivesAuthoredBilingualDescriptionAndAliases()
+        {
+            var recordingDay = Merged.GetByClrType("Monitor.API.TimeRecording.RecordingDay")!;
+
+            Assert.Contains("recording day", recordingDay.Description.En);
+            Assert.Contains("记录日", recordingDay.Description.Zh);
+            Assert.Contains("time recording day", recordingDay.Aliases.En);
+            Assert.Contains("记录日", recordingDay.Aliases.Zh);
+
+            // T2: an expandable field carries its authored description.
+            var workIntervals = recordingDay.Fields.Single(f => f.Name == "WorkIntervals");
+            Assert.Equal("The work intervals of the day.", workIntervals.Description.En);
+            Assert.Equal("当日的工作区间。", workIntervals.Description.Zh);
+        }
+
+        [Fact]
+        public void TimeRecordingCommand_ReceivesAuthoredContent()
+        {
+            var clockIn = Merged.GetByClrType("Monitor.API.TimeRecording.Commands.Recording.ClockIn")!;
+
+            Assert.Equal("Clock in an employee at the attendance terminal.", clockIn.Description.En);
+            Assert.Equal("在考勤终端为员工打卡上班。", clockIn.Description.Zh);
+            Assert.Contains("打卡上班", clockIn.Aliases.Zh);
+
+            // T2: a mandatory request-input field carries its authored description.
+            var employee = clockIn.Fields.Single(f => f.Name == "EmployeeId");
+            Assert.Equal("The employee to clock in.", employee.Description.En);
+            Assert.Equal("要打卡上班的员工。", employee.Description.Zh);
+        }
+
+        [Fact]
+        public void TimeRecordingSearch_MatchesChineseAliases()
+        {
+            // Discovery must work for Chinese-language prompts in the TimeRecording area too.
+            Assert.Contains(Merged.Search("记录日").Results, r => r.ClrType == "Monitor.API.TimeRecording.RecordingDay");
+            Assert.Contains(Merged.Search("加班").Results, r => r.ClrType == "Monitor.API.TimeRecording.OvertimeType");
+            Assert.Contains(Merged.Search("排班").Results, r => r.ClrType == "Monitor.API.TimeRecording.Schedule");
+            Assert.Contains(Merged.Search("打卡").Results, r => r.ClrType == "Monitor.API.TimeRecording.Commands.Recording.ClockIn");
+        }
+
+        [Fact]
+        public void TimeRecordingDto_CarriesFieldDescriptionsOnly()
+        {
+            var absencePeriod = Merged.GetByClrType("Monitor.API.TimeRecording.Commands.Recording.AbsencePeriod")!;
+
+            // dto records are not searchable: no record description, no aliases.
+            Assert.Equal(string.Empty, absencePeriod.Description.En);
+            Assert.Empty(absencePeriod.Aliases.En);
+
+            // ... but their request-input fields carry the authored descriptions.
+            var requirementType = absencePeriod.Fields.Single(f => f.Name == "RequirementType");
+            Assert.Equal("Whether the period is required, optional, or optional at schedule end.", requirementType.Description.En);
+            Assert.Equal("期间是否为必需、可选或排班结束时可选。", requirementType.Description.Zh);
         }
 
         [Fact]
