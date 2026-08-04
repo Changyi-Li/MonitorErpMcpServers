@@ -44,10 +44,11 @@ namespace MonitorErpMcp.Tests
         {
             var result = MonitorApiTools.Search(Catalog, "part");
 
-            // 156: identity (name/clrType/fullPath/route/aliases) plus the merged bilingual
+            // 157: identity (name/clrType/fullPath/route/aliases) plus the merged bilingual
             // descriptions, which are searchable per the search-depth ticket; grew from 138 as
-            // the Common, Manufacturing, and Purchase content fills added part-related records.
-            Assert.Equal(156, result.Total);
+            // the Common, Manufacturing, Purchase, and Accounting content fills added part-related
+            // records (the Accounting CodingDimension describes coding "by project, part, or department").
+            Assert.Equal(157, result.Total);
             Assert.Equal(0, result.Offset);
             Assert.Equal(10, result.Limit);
             Assert.Equal(10, result.Results.Count);
@@ -72,7 +73,7 @@ namespace MonitorErpMcp.Tests
         {
             var result = MonitorApiTools.Search(Catalog, "part", limit: 5, offset: 10);
 
-            Assert.Equal(156, result.Total);
+            Assert.Equal(157, result.Total);
             Assert.Equal(10, result.Offset);
             Assert.Equal(5, result.Limit);
             Assert.Equal(5, result.Results.Count);
@@ -398,7 +399,7 @@ namespace MonitorErpMcp.Tests
             var payload = JsonSerializer.Deserialize<MonitorApiSearchResponse>(
                 ((TextContentBlock)text).Text,
                 new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            Assert.Equal(156, payload!.Total);
+            Assert.Equal(157, payload!.Total);
             Assert.Equal(10, payload.Results.Count);
         }
 

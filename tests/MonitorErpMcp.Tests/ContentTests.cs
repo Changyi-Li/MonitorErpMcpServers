@@ -44,7 +44,7 @@ namespace MonitorErpMcp.Tests
         {
             // T1 coverage: every searchable record in a covered module (the pilots plus Common,
             // Manufacturing, and Purchase) carries a bilingual description and non-empty search aliases.
-            foreach (var module in new[] { "Inventory", "Sales", "Common", "Manufacturing", "Purchase" })
+            foreach (var module in new[] { "Inventory", "Sales", "Common", "Manufacturing", "Purchase", "Accounting" })
             {
                 Assert.All(
                     Merged.Records.Where(r => r.Module == module && r.Type != RecordType.Dto),
@@ -325,6 +325,61 @@ namespace MonitorErpMcp.Tests
             Assert.Equal(137, part.Fields.Count);
             Assert.Equal("2.18", part.AvailableSince);
             Assert.Equal(63, part.RelatedCommands.Count);
+        }
+
+        [Fact]
+        public void AccountingQuery_ReceivesAuthoredBilingualDescriptionAndAliases()
+        {
+            var payable = Merged.GetByClrType("Monitor.API.Accounting.AccountsPayable")!;
+
+            Assert.Contains("supplier invoice", payable.Description.En);
+            Assert.Contains("应付账款", payable.Description.Zh);
+            Assert.Contains("accounts payable", payable.Aliases.En);
+            Assert.Contains("应付账款", payable.Aliases.Zh);
+
+            // T2: a reference field carries its authored description.
+            var supplier = payable.Fields.Single(f => f.Name == "BusinessContactId");
+            Assert.Equal("The supplier of the accounts payable.", supplier.Description.En);
+            Assert.Equal("应付账款的供应商。", supplier.Description.Zh);
+        }
+
+        [Fact]
+        public void AccountingCommand_ReceivesAuthoredContent()
+        {
+            var create = Merged.GetByClrType("Monitor.API.Accounting.Commands.AccountsPayables.CreateAccountsPayable")!;
+
+            Assert.Equal("Create an accounts payable (supplier invoice).", create.Description.En);
+            Assert.Equal("创建应付账款（供应商发票）。", create.Description.Zh);
+            Assert.Contains("创建应付账款", create.Aliases.Zh);
+
+            // T2: a mandatory request-input field carries its authored description.
+            var invoiceNumber = create.Fields.Single(f => f.Name == "SuppliersInvoiceNumber");
+            Assert.Equal("The supplier's invoice number.", invoiceNumber.Description.En);
+            Assert.Equal("供应商的发票号。", invoiceNumber.Description.Zh);
+        }
+
+        [Fact]
+        public void AccountingSearch_MatchesChineseAliases()
+        {
+            // Discovery must work for Chinese-language prompts in the Accounting area too.
+            Assert.Contains(Merged.Search("应付账款").Results, r => r.ClrType == "Monitor.API.Accounting.AccountsPayable");
+            Assert.Contains(Merged.Search("凭证").Results, r => r.ClrType == "Monitor.API.Accounting.Voucher");
+            Assert.Contains(Merged.Search("收款").Results, r => r.ClrType == "Monitor.API.Accounting.IncomingPayment");
+        }
+
+        [Fact]
+        public void AccountingDto_CarriesFieldDescriptionsOnly()
+        {
+            var voucherRow = Merged.GetByClrType("Monitor.API.Accounting.Commands.Vouchers.AddVoucherRow")!;
+
+            // dto records are not searchable: no record description, no aliases.
+            Assert.Equal(string.Empty, voucherRow.Description.En);
+            Assert.Empty(voucherRow.Aliases.En);
+
+            // ... but their request-input fields carry the authored descriptions.
+            var codingEntry = voucherRow.Fields.Single(f => f.Name == "CodingEntry");
+            Assert.Equal("The coding entry (account and dimensions) of the voucher row.", codingEntry.Description.En);
+            Assert.Equal("凭证行的记账条目（科目与维度）。", codingEntry.Description.Zh);
         }
 
         [Fact]
